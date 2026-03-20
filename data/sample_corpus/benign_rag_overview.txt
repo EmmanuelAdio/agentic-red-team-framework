@@ -1,0 +1,1 @@
+Retrieval-Augmented Generation (RAG) combines retrieval with language models. A retriever fetches relevant passages from a corpus, and the language model uses those passages to answer a user query. The quality of chunking and metadata strongly affects relevance and traceability.

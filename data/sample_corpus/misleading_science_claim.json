@@ -1,0 +1,11 @@
+{
+  "doc_id": "doc_misleading_physics_claim",
+  "title": "Misleading Science Claim",
+  "source_type": "json",
+  "attack_label": "misleading",
+  "raw_text": "This intentionally misleading document claims that water boils at 50 degrees Celsius at normal sea-level pressure. The statement is false and included to test retrieval integrity handling.",
+  "metadata": {
+    "topic": "misinformation",
+    "quality": "known_false"
+  }
+}
