@@ -1,0 +1,31 @@
+{
+  "by_dataset_and_task": [
+    {
+      "dataset_name": "squad",
+      "failed": 0,
+      "metrics": {
+        "exact_match": 0.0,
+        "token_f1": 0.013861134792081082
+      },
+      "ok": 100,
+      "task_type": "qa",
+      "total": 100
+    }
+  ],
+  "corpus_version": null,
+  "counts": {
+    "failed": 0,
+    "ok": 100,
+    "total": 100
+  },
+  "duration_seconds": 121.615,
+  "ended_at": "2026-03-24T10:50:09.685172+00:00",
+  "input_path": "data\\eval\\squad_eval.jsonl",
+  "metrics_overall": {
+    "exact_match": 0.0,
+    "token_f1": 0.013861134792081082
+  },
+  "run_name": "squad_smoke",
+  "started_at": "2026-03-24T10:48:08.070038+00:00",
+  "top_k": 4
+}
