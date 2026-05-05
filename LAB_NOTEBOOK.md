@@ -58,4 +58,60 @@ Two things to note:
 - Decision check: lock the dependency set by re-running `pip-compile requirements.in -o requirements.txt` immediately before Day 9 experiments and tagging the resulting state as `v0.1.0`. That ensures every exploit-bundle's `key_dependencies` field can be reproduced byte-for-byte.
 
 ### Commit
-End-of-Day-1 commit pending — will land after `02_run_baseline.py` is re-run with a Day-2 query set, so the baseline numbers in this notebook are reproducible from the same code state.
+Day 1 work committed by hand at end of session.
+
+---
+
+## 2026-05-05 — Day 2 (same session as Day 1)
+
+### What I did
+Built the 50-query test set, refactored the corpus loader to make the experiment matrix feasible, and stood up a real test suite.
+
+- Spotted that a uniformly-random 1k-doc slice of NQ's ~2.6M-doc corpus would yield only ~1.3 expected overlaps with the ~3.4k NQ test queries — far short of the 50 required by spec §9 Day 9. Switched to **stratified sampling**: gold docs for 50 deterministic NQ test queries are guaranteed in the slice, with the remaining ~950 slots filled by uniform random docs (excluding gold to avoid duplicates).
+- New helper `select_test_queries(n_queries, seed)` is the **single source of truth** for which queries are in the test set. Both the corpus loader and the queries-file builder call it, so the slice composition and `data/queries.json` are guaranteed to agree.
+- Rewrote `load_nq_slice` to call `select_test_queries`, pull every gold doc, then top up with random fill. Each `Document` now carries `is_gold: bool` in metadata.
+- Added `--rebuild` flag to `scripts/01_build_corpus.py` — deletes `.chroma/` first, needed any time slice composition changes.
+- New `scripts/04_build_query_set.py` — writes `data/queries.json` (50 entries, schema `{query_id, query_text, gold_doc_ids}`) using the same `select_test_queries` call.
+- Rewrote `scripts/02_run_baseline.py` — reads `data/queries.json`, runs all 50 queries through the clean pipeline, reports baseline ASR-r (Attack Success Rate, retrieval) and top-1 == gold rate.
+- Test suite: `tests/conftest.py` + `tests/test_smoke.py`, `tests/test_corpus.py` (3 tests), `tests/test_retriever.py` (3), `tests/test_generator.py` (2), `tests/test_pipeline.py` (1). **10 tests total** — meets spec §13's "≥ 5 passing unit tests" definition-of-done with headroom. No LLM mocking (per spec rule); cache makes repeat runs fast.
+
+### What worked
+- Index rebuilt cleanly with `01_build_corpus.py --rebuild`. New `index_state_hash` reflects the new slice composition.
+- `04_build_query_set.py` produced 50 entries; first-entry sanity check showed query text and gold ids matching the qrels file.
+- **Baseline run on 50 queries produced 100% top-1 == gold and 100% ASR-r (gold in top-5).** Strong, clean baseline.
+- All 10 unit tests pass under `pytest tests/ -v`.
+
+### Problems faced this session
+1. **Sampling math.** Random 1k slice → expected overlap ≈ 1.3 queries. Caught before any Day-9 disaster; fixed with stratified sampling. The methodological paragraph for Chapter 4 is already drafted in the conversation log.
+2. **Stale Chroma after slice change.** Initial re-run of `01_build_corpus.py` was a no-op (idempotency check matched the old chunk count). Solved with explicit `--rebuild` flag rather than auto-invalidation, because invalidating on every script run would be expensive and surprising.
+3. **`BeIR/nq-qrels` is a separate HF dataset, not a config of `BeIR/nq`.** Brief confusion resolved by reading the BEIR repo conventions; recorded as a constant `HF_NQ_QRELS = "BeIR/nq-qrels"` in `corpus.py` so the next reader doesn't trip on it.
+4. **Considered a custom-queries feature** (user-supplied `data/custom_queries.json` merged into the test set). Declined: not necessary for the experiment matrix, expands the writeup surface (would need its own Methodology paragraph), and `scripts/03_inspect_index.py --query "..."` already covers ad-hoc exploration during attack development. Worth flagging in case the question comes up in viva.
+5. **HF_TOKEN warning** — `Warning: You are sending unauthenticated requests to the HF Hub`. Non-blocking; about rate limits, not access. Public datasets work fine without it. Setting it is optional; not done.
+
+### Key observation — the 100% baseline is *load-bearing* methodology
+
+| Metric | Clean baseline | Why it matters |
+| --- | --- | --- |
+| ASR-r (gold in top-5)        | 50/50 = 100% | Every poison attempt has a known target to displace |
+| top-1 == gold                | 50/50 = 100% | Rank-shift@k will produce clean integer shifts (not noise around an already-noisy baseline) |
+
+This is methodologically *desirable*, not suspicious. The attack-success metrics measure **change from baseline**:
+
+- **rank-shift@k** needs a known starting rank to measure shift from.
+- **ASR-r under attack** only carries information if the baseline is high — a 60% baseline ASR-r would mask attack effects in noise.
+- **Faithfulness drop ≥ 0.2** under attack (spec §6.2) is interpretable only if baseline Faithfulness is near 1.0.
+
+Why we got 100%: NQ qrels are sparse (≈1 gold doc per query, the doc that contained the answer in the original NQ annotation), and bge-small-en-v1.5 is a competent embedder for short factoid questions. Both fortunate. The Day 1 faithfulness-failure observation (LLM leaking priors when retrieval is weak) doesn't apply here because retrieval *isn't* weak on this set — Day 7's RAGAS Faithfulness baseline will likely be very high, leaving more headroom for measuring attack-induced drops.
+
+For Chapter 4 (Methodology):
+> *"The 1,000-document slice is constructed via stratified sampling: gold corpus documents for 50 NQ test queries (selected deterministically with seed 42) are included in full, with the remaining slots filled by uniform random sampling from the rest of the NQ corpus. This produces a baseline ASR-r of 100% and a baseline top-1 retrieval accuracy of 100% on the clean pipeline, providing a strong reference against which attack-induced rank shifts and faithfulness degradation can be measured without confound from baseline retrieval noise."*
+
+### What's next (Day 3 — prompt injection)
+- `src/redteam/attacks/prompt_injection.py` — payload generator for IPI (Indirect Prompt Injection).
+- Demonstrate at least one successful IPI end-to-end. Threat-model notes from spec §3:
+  - "Modify queries before retrieval" is *granted* (so query-side injection is in scope).
+  - "Write to corpus" is *granted* (so injecting an adversarial document that the retriever pulls is also in scope — this overlaps stylistically with corpus poisoning but the attack family is distinct: PI tries to *override generator instructions*, poisoning tries to *replace retrieved facts*).
+- Decision needed at start of Day 3: which IPI mode to demo first — query-side or corpus-side? Recommendation: corpus-side, because it (a) reuses Day 4's poisoning infrastructure and (b) matches the EchoLeak-style production scenario referenced in spec §3.
+
+### Commit
+Day 2 work ready to commit. Suggested message: `Day 2: stratified slice + 50-query test set + 10-test suite`.

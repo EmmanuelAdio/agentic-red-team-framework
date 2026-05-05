@@ -1,0 +1,364 @@
+[
+  {
+    "query_id": "test1195",
+    "query_text": "when did are you smarter than a 5th grader first air",
+    "gold_doc_ids": [
+      "doc42525"
+    ]
+  },
+  {
+    "query_id": "test1208",
+    "query_text": "when did the tv show the waltons first air",
+    "gold_doc_ids": [
+      "doc43104"
+    ]
+  },
+  {
+    "query_id": "test1260",
+    "query_text": "how many episodes in game if thrones season 7",
+    "gold_doc_ids": [
+      "doc44513"
+    ]
+  },
+  {
+    "query_id": "test1270",
+    "query_text": "give two reasons neisseria gonorrhoeae is able to re-infect individuals after treatment",
+    "gold_doc_ids": [
+      "doc45016"
+    ]
+  },
+  {
+    "query_id": "test1282",
+    "query_text": "what part of maryland is close to washington dc",
+    "gold_doc_ids": [
+      "doc45333"
+    ]
+  },
+  {
+    "query_id": "test1287",
+    "query_text": "who plays the lion in the movie zookeeper",
+    "gold_doc_ids": [
+      "doc45707"
+    ]
+  },
+  {
+    "query_id": "test1392",
+    "query_text": "when does the census have to be done by",
+    "gold_doc_ids": [
+      "doc49568"
+    ]
+  },
+  {
+    "query_id": "test1509",
+    "query_text": "what part of the brain is in the middle cranial fossa",
+    "gold_doc_ids": [
+      "doc53893"
+    ]
+  },
+  {
+    "query_id": "test1560",
+    "query_text": "turkish finnish and hungarian belong to which family of languages",
+    "gold_doc_ids": [
+      "doc55779"
+    ]
+  },
+  {
+    "query_id": "test1616",
+    "query_text": "actor who plays eric on boy meets world",
+    "gold_doc_ids": [
+      "doc57196"
+    ]
+  },
+  {
+    "query_id": "test170",
+    "query_text": "who wrote the music for christmas story live",
+    "gold_doc_ids": [
+      "doc6220",
+      "doc6235"
+    ]
+  },
+  {
+    "query_id": "test1855",
+    "query_text": "bible verse about honor thy mother and father",
+    "gold_doc_ids": [
+      "doc65334"
+    ]
+  },
+  {
+    "query_id": "test2097",
+    "query_text": "are they still making games for xbox one",
+    "gold_doc_ids": [
+      "doc72882"
+    ]
+  },
+  {
+    "query_id": "test214",
+    "query_text": "where is cellulose used in a plant cell",
+    "gold_doc_ids": [
+      "doc7711"
+    ]
+  },
+  {
+    "query_id": "test2239",
+    "query_text": "what does the sun represent on the uruguay flag",
+    "gold_doc_ids": [
+      "doc77815"
+    ]
+  },
+  {
+    "query_id": "test2325",
+    "query_text": "is the right to life liberty and the pursuit of happiness in the constitution",
+    "gold_doc_ids": [
+      "doc80282"
+    ]
+  },
+  {
+    "query_id": "test2342",
+    "query_text": "what was the worst flu season in history",
+    "gold_doc_ids": [
+      "doc80834"
+    ]
+  },
+  {
+    "query_id": "test2367",
+    "query_text": "who was the first signatory of the israeli declaration of independence",
+    "gold_doc_ids": [
+      "doc81884"
+    ]
+  },
+  {
+    "query_id": "test2381",
+    "query_text": "how long did it take to build the great pyramid of egypt",
+    "gold_doc_ids": [
+      "doc82212",
+      "doc82214"
+    ]
+  },
+  {
+    "query_id": "test2385",
+    "query_text": "where do the secretory cells of endocrine glands secrete their products",
+    "gold_doc_ids": [
+      "doc82401"
+    ]
+  },
+  {
+    "query_id": "test239",
+    "query_text": "what happens when iron reacts with oxygen and water",
+    "gold_doc_ids": [
+      "doc8829",
+      "doc8832"
+    ]
+  },
+  {
+    "query_id": "test2539",
+    "query_text": "how many pennsylvania house of representatives are there",
+    "gold_doc_ids": [
+      "doc87294"
+    ]
+  },
+  {
+    "query_id": "test2577",
+    "query_text": "who did the assyrians conquer in 722 bce",
+    "gold_doc_ids": [
+      "doc88443"
+    ]
+  },
+  {
+    "query_id": "test2614",
+    "query_text": "where does the black friday term come from",
+    "gold_doc_ids": [
+      "doc89476"
+    ]
+  },
+  {
+    "query_id": "test2682",
+    "query_text": "who has the most conference championships in college basketball",
+    "gold_doc_ids": [
+      "doc91796"
+    ]
+  },
+  {
+    "query_id": "test2712",
+    "query_text": "who is written in the book of life",
+    "gold_doc_ids": [
+      "doc92918"
+    ]
+  },
+  {
+    "query_id": "test2955",
+    "query_text": "where is the boy who played charlie in willy wonka",
+    "gold_doc_ids": [
+      "doc101103",
+      "doc101105",
+      "doc101116"
+    ]
+  },
+  {
+    "query_id": "test2985",
+    "query_text": "who does claire from mcleods daughters end up with",
+    "gold_doc_ids": [
+      "doc102388"
+    ]
+  },
+  {
+    "query_id": "test3002",
+    "query_text": "who plays mad eye moody in the harry potter movies",
+    "gold_doc_ids": [
+      "doc103003",
+      "doc103010"
+    ]
+  },
+  {
+    "query_id": "test3102",
+    "query_text": "where is urinary bladder located in human body",
+    "gold_doc_ids": [
+      "doc106172",
+      "doc106173",
+      "doc106179"
+    ]
+  },
+  {
+    "query_id": "test3138",
+    "query_text": "glycogen and amylopectin are long chains of which simple sugar(s)",
+    "gold_doc_ids": [
+      "doc107125"
+    ]
+  },
+  {
+    "query_id": "test317",
+    "query_text": "who wrote the music phantom of the opera",
+    "gold_doc_ids": [
+      "doc12091"
+    ]
+  },
+  {
+    "query_id": "test3203",
+    "query_text": "where was the italian episode of everybody loves raymond filmed",
+    "gold_doc_ids": [
+      "doc109446"
+    ]
+  },
+  {
+    "query_id": "test3259",
+    "query_text": "when did holland change its name to the netherlands",
+    "gold_doc_ids": [
+      "doc111384"
+    ]
+  },
+  {
+    "query_id": "test3338",
+    "query_text": "in 1973 congress passed the war powers resolution to",
+    "gold_doc_ids": [
+      "doc114092"
+    ]
+  },
+  {
+    "query_id": "test3347",
+    "query_text": "when did john steinbeck write of mice and me",
+    "gold_doc_ids": [
+      "doc114327"
+    ]
+  },
+  {
+    "query_id": "test3369",
+    "query_text": "who do you play as in dragon age origins",
+    "gold_doc_ids": [
+      "doc115048"
+    ]
+  },
+  {
+    "query_id": "test3408",
+    "query_text": "who wins the final fight in real steel",
+    "gold_doc_ids": [
+      "doc116092"
+    ]
+  },
+  {
+    "query_id": "test3415",
+    "query_text": "who sang wind beneath my wings from london's burning",
+    "gold_doc_ids": [
+      "doc116346"
+    ]
+  },
+  {
+    "query_id": "test431",
+    "query_text": "the function of the excretory system is to help maintain homeostasis by",
+    "gold_doc_ids": [
+      "doc15939"
+    ]
+  },
+  {
+    "query_id": "test454",
+    "query_text": "when did harry potter and the sorcerers stone take place",
+    "gold_doc_ids": [
+      "doc16752"
+    ]
+  },
+  {
+    "query_id": "test477",
+    "query_text": "who made the movie fifty shades of grey",
+    "gold_doc_ids": [
+      "doc17466",
+      "doc17467"
+    ]
+  },
+  {
+    "query_id": "test525",
+    "query_text": "when was the first orca put in captivity",
+    "gold_doc_ids": [
+      "doc19059",
+      "doc19063"
+    ]
+  },
+  {
+    "query_id": "test548",
+    "query_text": "who sings angel of the morning in deadpool",
+    "gold_doc_ids": [
+      "doc20075"
+    ]
+  },
+  {
+    "query_id": "test638",
+    "query_text": "who discovered the great red spot on jupiter",
+    "gold_doc_ids": [
+      "doc22901"
+    ]
+  },
+  {
+    "query_id": "test665",
+    "query_text": "when did the revolution begin in the united states",
+    "gold_doc_ids": [
+      "doc23665",
+      "doc23691"
+    ]
+  },
+  {
+    "query_id": "test75",
+    "query_text": "how long do nhl players stay on waivers",
+    "gold_doc_ids": [
+      "doc2262"
+    ]
+  },
+  {
+    "query_id": "test89",
+    "query_text": "where is the food stored in a yam plant",
+    "gold_doc_ids": [
+      "doc2892",
+      "doc2894"
+    ]
+  },
+  {
+    "query_id": "test903",
+    "query_text": "when do you celebrate birthday if born on feb 29",
+    "gold_doc_ids": [
+      "doc32152"
+    ]
+  },
+  {
+    "query_id": "test999",
+    "query_text": "where did huntington's disease get its name",
+    "gold_doc_ids": [
+      "doc35283"
+    ]
+  }
+]
