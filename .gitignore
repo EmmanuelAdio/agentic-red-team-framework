@@ -1,16 +1,26 @@
+# Environment
+.env
+.env.*
+!.env.example
 .venv/
+
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-
 .pytest_cache/
 .coverage
 htmlcov/
 
-.env
-.env.*
-!.env.template
+# Project data (regenerable)
+data/corpus/
+data/runs/
+.chroma/
+*.sqlite
 
+# OS / editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/

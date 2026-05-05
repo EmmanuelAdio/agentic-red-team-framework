@@ -1,0 +1,17 @@
+langchain
+langchain-openai
+langchain-community
+langchain-chroma
+langchain-huggingface
+langgraph
+chromadb
+ragas
+sentence-transformers
+datasets
+pydantic
+python-dotenv
+tenacity
+numpy
+pandas
+matplotlib
+pytest
