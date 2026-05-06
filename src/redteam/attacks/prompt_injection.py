@@ -79,7 +79,7 @@ _STOP_WORDS = {
 }
 
 
-def _topical_anchor(query_text: str, n_terms: int = 6) -> str:
+def topical_anchor(query_text: str, n_terms: int = 6) -> str:
     """Build a short paragraph that re-uses the query's content words.
 
     The bge-small embedder ranks documents by cosine similarity to the query;
@@ -130,7 +130,7 @@ def generate_ipi_payload(
             f"Unknown strategy {strategy!r}. Expected one of {sorted(_TEMPLATES)}."
         )
 
-    anchor = _topical_anchor(query_text)
+    anchor = topical_anchor(query_text)
     body = _TEMPLATES[strategy].format(
         topical_anchor=anchor,
         target_string=target_string,
