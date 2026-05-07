@@ -10,9 +10,10 @@ Each diagram has three parts:
    what triggers each control-flow edge. These rationale blocks are written
    to lift verbatim into the dissertation's Chapter 3 (Design).
 
-A closing §6 ("Cross-cutting design choices") covers the system-wide
-decisions that don't belong to any single diagram — model picks,
-reproducibility primitives, scope discipline, etc.
+A standalone §6 ("Metrics rationale") covers the three metric families
+wired in on Day 7, and a closing §7 ("Cross-cutting design choices")
+covers the system-wide decisions that don't belong to any single
+diagram — model picks, reproducibility primitives, scope discipline, etc.
 
 Sections marked **(placeholder)** will be populated on the day named in
 their heading.
@@ -336,12 +337,171 @@ Day 8.
 
 ---
 
-## 6. Cross-cutting design choices
+## 6. Metrics rationale
+
+### What this section is
+
+A prose-only design block (no diagram) covering the three metric
+families wired in on Day 7: the ASR triple, `rank_shift@k`, and the
+RAGAS triple. Each subsection explains *why this metric*, *why this
+specific definition*, and *what alternatives were rejected*. Lifts
+into Chapter 3 (Design) directly.
+
+### 6.1 Why reference-free metrics?
+
+The dissertation's Contribution C1 is a framework that scores attack
+success **without an oracle answer key** — a property most published
+RAG-attack benchmarks lack. Reference-required metrics (BLEU, ROUGE,
+exact-match against a gold answer) force you to ship the framework with
+a labelled corpus, which constrains generalisation and makes it
+impossible to red-team a third-party system whose ground truth you
+don't have. The three metric families chosen here are *all
+reference-free*:
+
+- ASR triple uses an attacker-supplied marker, not a gold answer.
+- `rank_shift@k` uses the system's own pre-attack output as the
+  reference, not a labelled top-1 doc.
+- RAGAS uses LLM-judge consistency between query, retrieved context,
+  and answer, with no ground-truth answer required.
+
+This is what makes the framework portable to scenarios where the
+attacker has corpus-write but no ground truth — exactly the
+EchoLeak / PoisonedRAG production threat model.
+
+### 6.2 ASR triple — why decompose?
+
+Spec §6.1 (and AgentPoison [9]) decomposes attack success into three
+components: ASR-r (did the payload reach the LLM?), ASR-a (did the LLM
+emit the marker?), ASR-t (both — end-to-end success). The decomposition
+isolates *where* an attack failed:
+
+- ASR-r = 0 → retrieval-side failure (topical anchor didn't work, or
+  embedding geometry rejected the payload).
+- ASR-r = 1, ASR-a = 0 → generator-side failure (LLM saw the payload
+  but did not comply / preferred surviving clean evidence). This is
+  exactly the Day-4 cross-family asymmetry finding.
+- ASR-t = 1 → end-to-end success.
+
+Without the decomposition, both failure modes would aggregate into a
+single "0% success" number that obscures the operative variable.
+
+**Why substring matching for ASR-a (not LLM-judge)?** Substring is
+deterministic, cheap, fast, and aligned with how the published RAG-attack
+literature reports ASR ([6], [9]). LLM-judge would catch paraphrased /
+semantically-equivalent compliance but adds non-determinism and another
+LLM call per evaluation — logged in `FUTURE_WORKS.md` §5.2 as a
+refinement.
+
+### 6.3 `rank_shift@k` — why this definition?
+
+Spec §6.3 defines rank-shift as "the change in rank position of the
+originally top-1 clean document". The implementation:
+
+1. Run a *baseline* (clean) retrieval pass before the attacked one.
+2. Identify `baseline_top1_doc_id`.
+3. Look up that doc-id in the attacked top-k. If present at rank `r`,
+   `rank_shift = r - 1`. If absent, treat as if it landed at rank `k+1`
+   (sentinel) so `rank_shift = k`.
+
+**Why does the metric *only* track the baseline rank-1 doc?** It's the
+single most-important retrieval result — the doc the system would have
+cited if no attack had occurred. Tracking it directly answers "did the
+attack push the original top answer aside?", which is the production
+question. Tracking *all* baseline-top-k positions (a Kendall-tau-style
+metric) was rejected as a generalisation that adds complexity for
+marginal interpretability gain at this scope.
+
+**Why cache the baseline per-query inside the executor?** The Day-9
+~300-run matrix iterates each query 2 times under the LangGraph loop
+(plus 3 seeds). Without caching, each query would do 6 baseline
+pipeline runs — wasteful when the SQLiteCache already makes them
+near-free. The closure-level dict cache is per-process; cross-process
+caching is unnecessary because the clean prompt's SQLiteCache hit makes
+it sub-millisecond anyway.
+
+### 6.4 RAGAS triple — why these three, why this provider?
+
+Spec §6.2 names Faithfulness, Answer Relevance, Context Relevance —
+the three RAGAS metrics most often cited in the RAG-evaluation
+literature and the ones with the cleanest definitions for an attacked
+condition:
+
+- **Faithfulness** ↓ under attack means the LLM is producing claims
+  not supported by retrieved context — the *integrity-degradation*
+  signal. Spec §6.2 names a ≥0.2 drop as "integrity-degraded".
+- **Answer Relevance** ↓ under attack means the LLM is answering a
+  *different question* than the one asked — the *off-topic-pivot*
+  signal.
+- **Context Relevance** ↓ under attack means the retrieval context is
+  drifting from the query's information need — the *topical-pollution*
+  signal.
+
+**Why our `gpt-4o-mini` and not RAGAS's default `gpt-4`?** Two reasons.
+First, model-pinning consistency: the bundle JSON records exactly one
+LLM model per run, and using a different evaluator model would mean
+the bundle's `target_system.llm_model` would not cover the RAGAS
+calls. Second, cost: `gpt-4` evaluation would 10× the per-run RAGAS
+cost without a corresponding accuracy gain on these three metrics
+(RAGAS's own benchmarks show convergent results down to mid-tier
+models).
+
+**Why `AsyncOpenAI` for both the LLM and the embeddings, and why we
+bypass RAGAS's sync `score()` entirely.** RAGAS 0.4 has two coupled
+quirks that surfaced once the wrapper was exercised inside a Jupyter
+kernel:
+
+1. *RAGAS refuses sync `.score()` when an event loop is already
+   running.* `BaseMetric.score()` checks `asyncio.get_running_loop()`
+   and raises `RuntimeError: Cannot call sync score() from an async
+   context. Use ascore() instead.` Jupyter / IPython kernels keep a
+   live event loop in the background, so every `score()` call from a
+   notebook fails with this error. `nest_asyncio.apply()` does not
+   help here — RAGAS isn't *trying* to nest, it's *refusing* to. The
+   wrapper bypasses `.score()` and calls `metric.ascore(...)` itself,
+   wrapped in our own `asyncio.run()`. With `nest_asyncio` patched at
+   scorer-build time, `asyncio.run()` works inside Jupyter; outside
+   Jupyter (pytest, scripts, batch runner) the patch is a no-op.
+
+2. *RAGAS's async path requires async clients on both LLM and
+   embeddings.* `ascore()` for `Faithfulness` / `ContextRelevance`
+   calls `llm.agenerate(...)` which the sync `OpenAI` client refuses
+   with `TypeError: Cannot use agenerate() with a synchronous
+   client`. `ascore()` for `AnswerRelevancy` *additionally* calls
+   `embeddings.aembed_text(...)` which has the same constraint on
+   the embedding client. The wrapper passes a single `AsyncOpenAI`
+   instance to both `llm_factory(..., client=async_client)` and
+   `OpenAIEmbeddings(client=async_client)`.
+
+This async-everywhere choice means: RAGAS works identically in pytest,
+scripts, and Jupyter notebooks; the SQLiteCache underneath still fires
+on repeated (query, context, answer) triples; and the wrapper's
+`try/except` records the original error class on any new RAGAS-API
+drift so future readers can diagnose without re-instrumenting.
+
+**Why a separate embedder (`text-embedding-3-small`) for Answer
+Relevance, not the project's `bge-small-en-v1.5`?** Answer Relevance
+embeds the original query and the LLM-reverse-engineered question and
+compares them — this is *evaluation geometry*, not retrieval geometry.
+Reusing the retrieval embedder would conflate the two. RAGAS's default
+(`text-embedding-3-small`) is the principled choice; the small extra
+cost is recorded in §7.3 cost arithmetic.
+
+**Why wrap every RAGAS call in `try/except`?** Spec §10's risk register
+flags "RAGAS metrics return NaN on edge cases" as high-likelihood. The
+wrapper records `None` per metric on failure with the reason in
+`notes`, so the bundle JSON preserves *why* a score is missing. A
+silent NaN-to-0 collapse (the spec's quick-fix suggestion) was rejected
+because 0 is also a valid RAGAS score, and conflating "scored 0" with
+"failed to score" loses important information at the analysis stage.
+
+---
+
+## 7. Cross-cutting design choices
 
 These decisions span multiple components and don't belong to a single
 diagram. Each is sourced for direct lift into Chapter 3.
 
-### 6.1 Model choices
+### 7.1 Model choices
 
 **Embedding model: `BAAI/bge-small-en-v1.5`.** ~33M parameters, runs
 CPU-only, top of the MTEB leaderboard for its size class. Picked for
@@ -364,7 +524,7 @@ re-executable. RAGAS metrics computed on a non-deterministic generator
 output would have different values across re-runs, breaking the
 reproducibility contribution.
 
-### 6.2 Reproducibility primitives
+### 7.2 Reproducibility primitives
 
 **`SQLiteCache` on every LLM call.** Set globally in
 `redteam.target.generator` via LangChain's `set_llm_cache`. Re-runs hit
@@ -389,7 +549,7 @@ payload-id hashing (`generate_*_payload(seed=...)`) — takes an explicit
 seed argument. Default 42 across the project; the 3-seed Day-9 matrix
 uses 42 / 7 / 1729.
 
-### 6.3 Caching + cost discipline
+### 7.3 Caching + cost discipline
 
 **Cache hit rule:** for the cache to fire, the *prompt string* must be
 byte-identical. Re-runs of the same experiment matrix are full cache
@@ -405,7 +565,7 @@ a Day-9 fallback rather than a Day-1 build choice because development
 iteration is much faster on hosted gpt-4o-mini, and the cache means
 final-experiment cost is amortised.
 
-### 6.4 Scope discipline
+### 7.4 Scope discipline
 
 **Two attack families, not three.** Spec §2 "drop the third" rule. The
 two-family choice is what enables a *cross-family* comparison axis in
@@ -427,7 +587,7 @@ Adding a defence layer would have doubled the design surface for marginal
 research-question payoff. Defence implementation is `FUTURE_WORKS.md`
 §5.3 — the natural symmetric extension.
 
-### 6.5 What's deliberately NOT in this codebase
+### 7.5 What's deliberately NOT in this codebase
 
 - No HTTP layer: the framework targets a single in-process pipeline
   (`FUTURE_WORKS.md` §1.1).

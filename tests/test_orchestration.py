@@ -89,7 +89,7 @@ def test_graph_runs_one_iteration_round_trip() -> None:
     pipeline = RAGPipeline(retriever=retriever, generator=LLMGenerator())
     # Day 6: pass a never-call exploit generator so we don't depend on the
     # real LLM for this Day-5-style round-trip test.
-    app = build_graph(pipeline, exploit_gen=_RaisingExploitGen())
+    app = build_graph(pipeline, exploit_gen=_RaisingExploitGen(), run_ragas=False)
 
     initial: RedTeamState = {
         "run_id": "test_day5_one_iter",
@@ -234,7 +234,7 @@ def test_graph_iteration_zero_uses_template_path() -> None:
     demo_query = json.loads(queries_path.read_text(encoding="utf-8"))[0]
 
     pipeline = RAGPipeline(retriever=retriever, generator=LLMGenerator())
-    app = build_graph(pipeline, exploit_gen=_RaisingExploitGen())
+    app = build_graph(pipeline, exploit_gen=_RaisingExploitGen(), run_ragas=False)
 
     final = app.invoke({
         "run_id": "test_day6_iter0_template",
@@ -270,7 +270,7 @@ def test_graph_iteration_one_uses_llm_path() -> None:
     forced_planner = Planner(epsilon=0.0, seed=42)
     forced_planner.update("seed", "prompt_injection", asr_t=True)  # IPI ahead
 
-    app = build_graph(pipeline, planner=forced_planner, exploit_gen=fake_gen)
+    app = build_graph(pipeline, planner=forced_planner, exploit_gen=fake_gen, run_ragas=False)
 
     final = app.invoke({
         "run_id": "test_day6_iter1_llm",
@@ -288,3 +288,54 @@ def test_graph_iteration_one_uses_llm_path() -> None:
     assert total_calls == 1, f"expected 1 LLM call, got {total_calls}"
     # And rollback still holds.
     assert retriever.get_state_hash() == pre_hash
+
+
+# ---------------------------------------------------------------------------
+# Day 7 — metrics fields wired through the graph
+# ---------------------------------------------------------------------------
+
+
+def test_graph_populates_metric_fields() -> None:
+    """The Day-5 round-trip test now asserts the Day-7 metric fields are present.
+
+    `asr_target` and `rank_shift_at_k` come from the metrics modules;
+    `baseline_retrieved_docs` is captured by the executor's baseline pass;
+    `ragas_*` are None here because we pass `run_ragas=False` to keep the
+    test offline (covered by the dedicated RAGAS test instead).
+    """
+    load_env()
+
+    retriever = Retriever(persist_dir=CHROMA_DIR, embedding_model_name=EMBEDDING_MODEL)
+    if retriever._count() == 0:
+        pytest.skip("Chroma empty.")
+    queries_path = DATA_DIR / "queries.json"
+    if not queries_path.exists():
+        pytest.skip("queries.json missing.")
+    demo_query = json.loads(queries_path.read_text(encoding="utf-8"))[0]
+
+    pipeline = RAGPipeline(retriever=retriever, generator=LLMGenerator())
+    app = build_graph(pipeline, exploit_gen=_RaisingExploitGen(), run_ragas=False)
+
+    final = app.invoke({
+        "run_id": "test_day7_metrics",
+        "seed": 42,
+        "query": demo_query["query_text"],
+        "query_id": demo_query["query_id"],
+        "iteration": 0,
+        "max_iterations": 1,
+        "history": [],
+    })
+
+    # ASR triple now includes asr_target as an explicit field.
+    assert isinstance(final["asr_target"], bool)
+    assert final["asr_target"] == (final["asr_retrieval"] and final["asr_answer"])
+    # rank_shift_at_k is now a real int (was a 0 placeholder pre-Day-7).
+    assert isinstance(final["rank_shift_at_k"], int)
+    # Baseline pass populated.
+    assert final["baseline_retrieved_docs"], "executor did not capture baseline"
+    assert isinstance(final["baseline_generator_output"], str)
+    # RAGAS disabled → all None with a notes flag.
+    assert final["ragas_faithfulness"] is None
+    assert final["ragas_answer_relevance"] is None
+    assert final["ragas_context_relevance"] is None
+    assert final["ragas_notes"] and "disabled" in final["ragas_notes"]

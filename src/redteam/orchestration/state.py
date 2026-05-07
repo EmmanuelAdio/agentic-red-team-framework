@@ -63,17 +63,25 @@ class RedTeamState(TypedDict, total=False):
     retrieved_docs: list[dict[str, Any]]  # [{doc_id, rank, score, content, is_poisoned}]
     generator_output: str
     generator_latency_ms: float
+    # Day 7: clean-pass results captured before the payload is inserted.
+    # Powers `rank_shift_at_k` (compares baseline rank-1 vs attacked rank).
+    # Cached once per query inside the executor's closure so iterating a
+    # query multiple times only runs one baseline pass.
+    baseline_retrieved_docs: list[dict[str, Any]]
+    baseline_generator_output: str
 
     # --- evaluator output ---------------------------------------------------
     # RAGAS triple — stays None until Day 7.
     ragas_faithfulness: Optional[float]
     ragas_answer_relevance: Optional[float]
     ragas_context_relevance: Optional[float]
-    # ASR (Attack Success Rate) triple — Day 5 fills these inline; Day 7
-    # moves the logic into `redteam.metrics.asr`.
+    # ASR (Attack Success Rate) triple — computed by `redteam.metrics.asr`.
     asr_retrieval: bool
     asr_answer: bool
-    rank_shift_at_k: int
+    asr_target: bool  # Day 7: was implicit (asr_r and asr_a); now stored.
+    rank_shift_at_k: int  # Day 7: computed by `redteam.metrics.rank_shift`.
+    # Day 7: RAGAS notes — captures NaN/exception reasons for traceability.
+    ragas_notes: Optional[str]
     verdict: Verdict
 
     # --- bookkeeping --------------------------------------------------------

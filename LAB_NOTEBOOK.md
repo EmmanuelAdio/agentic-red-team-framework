@@ -431,3 +431,86 @@ Day 5 made the orchestration substrate work; Day 6 makes it adaptive. The single
 
 ### Commit
 Day 6 work ready to commit. Suggested message: `Day 6: ε-greedy planner + LLM exploit generator + DIAGRAMS.md design rationale (24/24 tests)`.
+
+---
+
+## 2026-05-09 — Day 7
+
+### What I did
+Implemented the **metrics module** — three reference-free families wired into `evaluate_node` so every run now produces all the fields the Day-8 bundle JSON needs: ASR triple (refactored out of inline Day-5 logic), `rank_shift@k` (new — needs a baseline pipeline pass), and the RAGAS triple (Faithfulness, Answer Relevance, Context Relevance). Adopted **TDD** for the two pure modules where it earns its weight (per the Day-4 deferral note); kept code-then-tests for RAGAS because the external API is finicky enough that test-first is awkward.
+
+- New `src/redteam/metrics/asr.py` (TDD). `ASRTriple` frozen dataclass + three pure functions: `compute_asr_retrieval`, `compute_asr_answer`, `compute_asr` (composes). Behaviour matches the inline Day-5 evaluator exactly so existing tests keep passing.
+- New `src/redteam/metrics/rank_shift.py` (TDD). `RankShift` dataclass + `compute_rank_shift(baseline_retrieved, attacked_retrieved, k=5)`. Sentinel: if the baseline rank-1 doc fell out of the attacked top-k, `attacked_rank=None` and `rank_shift=k` (max possible shift).
+- New `src/redteam/metrics/ragas_wrapper.py` (code-then-tests). `RagasScores` dataclass + `compute_ragas_scores(query, retrieved_contexts, answer)`. Uses RAGAS 0.4.3's `metrics.collections` API with our `gpt-4o-mini` (consistent model-pinning) and **`AsyncOpenAI`** for the LLM client (RAGAS's `score()` method internally calls `asyncio.run(ascore())` which hits `llm.agenerate()` — sync clients fail with TypeError). Embedding for Answer Relevancy uses RAGAS's default `text-embedding-3-small` (separate from the project's bge-small retrieval embedder; conflating them would mix evaluation geometry with retrieval geometry). Every per-metric call is wrapped in `try/except` per spec §10's risk register; failures and NaN results land as `None` in the dataclass with the reason in `notes`.
+- Modified `src/redteam/orchestration/state.py`. Added `baseline_retrieved_docs`, `baseline_generator_output`, `asr_target` (was implicit), `ragas_notes`. The Day-5/6 fields stay.
+- Refactored `src/redteam/orchestration/graph.py`. The executor now does a *baseline* pipeline pass before the attacked one (cached per query inside the closure — Day-9's experiment runs each query 3 seeds × 2 iterations = 6 passes per query, and we want 1 baseline pass per query, not 6). The evaluator is now a thin coordinator that calls `compute_asr`, `compute_rank_shift`, `compute_ragas_scores` and writes their outputs to state. `build_graph` gains a `run_ragas: bool = True` flag so tests can disable the RAGAS path (the only LLM-call branch in evaluation) and stay fast/offline.
+- New `tests/test_metrics_asr.py` — 11 tests, pure-Python, TDD (red → green confirmed). Covers retrieval/absent/present, answer/case/whitespace/empty, triple composition.
+- New `tests/test_metrics_rank_shift.py` — 5 tests, pure-Python, TDD. Covers unchanged top-1 (shift 0), pushed-down (shift = attacked_rank - 1), dropped-out-of-top-k (sentinel `k`), empty-baseline raises, missing-rank-field falls back to list index.
+- New `tests/test_metrics_ragas.py` — 2 tests. The defensive test (empty query) runs offline and exercises the wrapper's failure-recording contract. The smoke test runs the real RAGAS triple against a tiny synthetic fixture and asserts at least one of the three scores is a float in [0, 1] (skips if no API key).
+- Extended `tests/test_orchestration.py` with `test_graph_populates_metric_fields`. Asserts `asr_target` is a bool consistent with `asr_r ∧ asr_a`, `rank_shift_at_k` is an int (was a 0 placeholder pre-Day-7), `baseline_retrieved_docs` is populated, and the RAGAS fields are `None` with a "ragas disabled" notes flag (because the test passes `run_ragas=False`).
+- Notebook addition. New "Day 7 — Reference-free integrity metrics" section in `notebooks/02_attack_dev.ipynb`. Builds the default graph (RAGAS on) and renders a single-row DataFrame with every metric column populated. The cell's runtime is dominated by RAGAS's 5–6 LLM calls (~10–15 seconds uncached, ~0 cached).
+- DIAGRAMS.md gained a new §6 "Metrics rationale" prose-only section with four sub-sections: 6.1 *why reference-free*, 6.2 *why ASR triple decomposition*, 6.3 *rank_shift@k definition + baseline-cache reasoning*, 6.4 *RAGAS choices* (why these three metrics, why our gpt-4o-mini, why AsyncOpenAI, why a separate evaluator embedder). The original §6 ("Cross-cutting design choices") is now §7. These rationale blocks lift verbatim into Chapter 3 (Design).
+- **Total now 43 tests.** All passing.
+
+### What worked
+- **TDD red-then-green** caught two design issues before implementation. (a) For ASR, the test for "answer marker present but payload absent" forced me to think about whether ASR-t should be `answer-only` or `retrieval AND answer` — ended up with the conjunctive definition matching spec §6.1. (b) For rank-shift, the test for "dropped out of top-k" forced the sentinel choice (`rank_shift = k`, not `None`) so the metric stays orderable across runs.
+- **The defensive RAGAS test caught the AsyncOpenAI requirement.** The first implementation used the sync `OpenAI` client. The smoke test failed with `TypeError: Cannot use agenerate() with a synchronous client. Use generate() instead.` Fix was a one-line client swap. Without the test the failure would have only surfaced on Day 8 when bundle JSON started being written, much harder to diagnose with bundle-write code in flight too.
+- **Baseline caching works as intended.** First test execution shows the baseline runs once per query even though the round-trip test exercises the executor twice (its own pipeline.run + the closure's baseline pass).
+
+### Problems faced this session
+1. **RAGAS API drift.** Spec was written assuming RAGAS 0.2 idioms; the installed version is 0.4.3 which has a new `metrics.collections` import path, requires explicit LLM/embedding clients passed in, and uses `MetricResult.value` instead of returning bare floats. Also discovered that some metrics (`Faithfulness`, `ContextRelevance`) need only an LLM, while `AnswerRelevancy` needs both LLM and embeddings — so the wrapper has to construct both. Documented in `compute_ragas_scores`'s docstring + §6.4 of DIAGRAMS.md so the choice is reviewable.
+2. **Async vs sync OpenAI client.** `RAGAS.metrics.collections` metrics call their `score()` method which internally does `asyncio.run(self.ascore(...))` → `llm.agenerate(...)`. The wrapped sync `OpenAI()` client raises `TypeError`. Fix: use `AsyncOpenAI` for the LLM, sync `OpenAI` for the embedding wrapper. Recorded in DIAGRAMS.md §6.4 because future readers will hit the same issue.
+3. **RAGAS as the "Day 9 cost tripwire" component.** Each per-run RAGAS triple is ~5 LLM calls. At 50 queries × 2 attacks × 3 seeds = 300 runs that's 1500 RAGAS calls. On gpt-4o-mini that's ~$0.15 uncached — well under the $50 cap. But re-runs hit the SQLiteCache (set globally in `redteam.target.generator`), so iteration is free. Documented the cost arithmetic in DIAGRAMS.md §7.3.
+4. **`asr_target` was implicit before.** Day-5/6 stored `asr_retrieval` and `asr_answer` separately and computed `asr_t = asr_r and asr_a` inline in the verdict logic. With ASR moved into a dedicated module, `asr_target` is now an explicit field on the dataclass + state. The Day-7 orchestration test explicitly asserts the consistency property `asr_t == (asr_r and asr_a)`.
+
+### Key observation — *integrity metrics close the RQ3 loop*
+
+RQ3 ("can we score reproducibly?") needs each run to produce a complete metric vector. Day 7 makes that vector real for the first time: ASR triple + rank-shift + RAGAS triple are all computed from the same `state["retrieved_docs"]` + `state["generator_output"]` + `state["baseline_retrieved_docs"]` triple. The bundle JSON serialiser (Day 8) just lifts these fields into the `evaluation` block; no further computation is needed at bundle-write time.
+
+The **methodologically interesting** consequence is that `rank_shift@k` and the RAGAS triple are *orthogonal* signals to the ASR triple. ASR-r tells you *whether* the attack reached the LLM; rank-shift tells you *by how much* it displaced the gold doc; Faithfulness tells you *what the LLM did with the polluted context*. The Day-4 cross-family asymmetry now has three independent measurements, not one — which makes Chapter 6 a properly multi-dimensional finding rather than a single ASR-t bar chart.
+
+**Paragraph for Chapter 5 (Methodology):**
+
+> *The evaluator computes three reference-free metric families per run. The Attack Success Rate (ASR) triple, adapted from AgentPoison [9], decomposes end-to-end success into a retrieval component (ASR-r: payload in retriever top-k), an answer component (ASR-a: attacker's marker substring in the generator output, whitespace-normalised case-insensitive match), and their conjunction (ASR-t). The rank_shift@k metric (spec §6.3) tracks the change in rank position of the document the system would have ranked first under no attack — operationalised by running a *baseline* clean retrieval pass before the attacked one and locating the baseline top-1 document in the attacked top-k. The RAGAS triple (Faithfulness, Answer Relevance, Context Relevance) provides reference-free integrity scoring against the (query, retrieved-context, answer) triple. All three families are computed from the same per-run state so that the bundle JSON's `evaluation` block (spec §7) records a single coherent metric vector. Defensive try/except handling per spec §10's risk register records RAGAS failures as `None` plus a human-readable reason, preserving the why for the analysis stage rather than silently coercing failures to zero.*
+
+**Caveats for Chapter 7 (Discussion):**
+- ASR-a uses substring matching, not LLM-judge semantic equivalence — paraphrased compliance is missed. Logged in `FUTURE_WORKS.md` §5.2.
+- RAGAS scores are themselves LLM-judge-derived (gpt-4o-mini computes them); evaluator-bias is a known property of LLM-as-judge metrics. Discussion should note this, alongside the project's choice to use the same model as the target (consistent model-pinning) rather than a stronger model (which would introduce a different bias).
+- `rank_shift@k` only tracks the baseline top-1 doc's displacement; an attack that pushes baseline ranks 2–5 around but leaves rank 1 stable would register `rank_shift = 0`. A Kendall-tau-style metric covering the whole baseline top-k is `FUTURE_WORKS.md` §6 territory.
+
+### What's next (Day 8 — Exploit-bundle JSON I/O)
+- `src/redteam/bundles/schema.py` — pydantic model matching spec §7 verbatim. The metric fields populated today serialise into the `evaluation` block; the `attack` block uses `payload_source` from Day 6; the `target_system` block uses the constants from `redteam.config`.
+- `src/redteam/bundles/store.py` — write to `data/runs/{run_id}.json`. Filesystem only for now; cloud / S3 stays in `FUTURE_WORKS.md`.
+- `scripts/03_run_experiments.py --quick` — 30-bundle dry run per spec §13's "definition of done".
+- TDD adoption: bundles is the second strong candidate per the Day-4 deferral. Plan to write the schema test first (round-trip a fixture bundle through `BundleStore.write` → `BundleStore.read` → assert dict-equality).
+
+### Addendum — RAGAS async client saga (post-Day-7, mid-session)
+
+After the initial Day-7 commit-ready point, executing the notebook's Day-7 cell surfaced a class of failures the pytest smoke test did not catch. The fix took two iterations and is recorded here in full because the Chapter 5 paragraph on the methodology section depends on it being honest.
+
+1. **First failure — `RuntimeError: asyncio.run() cannot be called from a running event loop`** on every RAGAS call. Hypothesised cause: Jupyter kernel keeps a live event loop in the background. Initial fix: add `nest_asyncio.apply()` to the wrapper's `_build_default_scorers`. Logic: nest_asyncio re-entrantly patches asyncio so a nested `asyncio.run()` is tolerated.
+
+2. **First fix did not work — same RuntimeError pattern** persisted. Diagnostic step: read RAGAS's `BaseMetric.score()` source. Discovery: RAGAS does not *try* to nest `asyncio.run()`. It explicitly *refuses*: `asyncio.get_running_loop()` succeeds inside Jupyter, RAGAS raises `RuntimeError("Cannot call sync score() from an async context. Use ascore() instead.")`. So `nest_asyncio` had nothing to patch — RAGAS was failing before any nesting was attempted.
+
+3. **Second fix — bypass `score()` entirely.** The wrapper now calls `metric.ascore(...)` directly, wrapped in our own `asyncio.run()`. `nest_asyncio.apply()` is still applied at scorer-build time so our `asyncio.run()` works inside Jupyter; outside Jupyter the patch is a no-op and the call is the standard sync→async hop.
+
+4. **Second fix exposed a second TypeError.** With `ascore()` now reaching the embeddings layer for `AnswerRelevancy`, the sync `OpenAI` client refused `aembed_text(...)` with `TypeError: Cannot use aembed_text() with a synchronous client`. Same async-vs-sync pattern as the LLM client, just on a different code path. Final fix: pass `AsyncOpenAI` to *both* `llm_factory(..., client=async_client)` and `OpenAIEmbeddings(client=async_client)`.
+
+After both fixes, all three RAGAS metrics fire cleanly in Jupyter (Faithfulness 1.0, Answer Relevance 0.87, Context Relevance 1.0 on the demo query) and the existing pytest smoke test still passes. **Total still 43/43 tests.**
+
+### What worked (about the diagnostic process, not the code)
+
+- **The defensive smoke test caught the issue early.** Without the test, the failure would only have surfaced on Day 8 with bundle-write code in flight, doubling the diagnostic surface.
+- **Reading RAGAS's source was decisive.** The first hypothesis (nesting issue) was reasonable on the symptoms but wrong on the cause. Three minutes of `inspect.getsource(BaseMetric.score)` was worth more than thirty minutes of patching.
+- **Pytest and Jupyter exercise different paths.** Pytest runs without a live event loop; Jupyter runs with one. Code that works in one can fail in the other for orthogonal reasons. The right defence is to test in *both* contexts, not assume they're equivalent.
+
+### Updated paragraph for Chapter 5 (Methodology)
+
+> *Integration with RAGAS 0.4 surfaced two coupled async-vs-sync constraints that the wrapper resolves uniformly. RAGAS's synchronous `BaseMetric.score()` method explicitly refuses to run when an event loop is already active, raising rather than nesting; this fails inside Jupyter / IPython kernels which keep a background event loop. The wrapper therefore bypasses `score()` and calls `metric.ascore(...)` directly, wrapped in `asyncio.run()` patched re-entrantly via `nest_asyncio` for compatibility with both the notebook and pytest contexts. Following this change, the async path additionally requires async OpenAI clients on both the language-model and the embedding-model interfaces; the wrapper passes a single `AsyncOpenAI` instance to both `llm_factory` and `OpenAIEmbeddings`. Each per-metric call is wrapped in `try/except` recording the original exception class in a `notes` field, preserving traceability for any future RAGAS-API drift.*
+
+### DIAGRAMS.md § 6.4 updated correspondingly
+
+The §6.4 RAGAS rationale block was rewritten with the corrected async-everywhere story (the original draft, written before the issue surfaced, said "sync OpenAI for the embedding helper" — wrong). Sub-headings under §7 were also renumbered (`6.x` → `7.x`) to fix a numbering bug introduced when §6 was inserted.
+
+### Commit
+Day 7 work + RAGAS async fix ready to commit. Suggested message: `Day 7: metrics module (ASR + rank_shift + RAGAS async-everywhere) + DIAGRAMS.md §6 metrics rationale (43/43 tests)`.
