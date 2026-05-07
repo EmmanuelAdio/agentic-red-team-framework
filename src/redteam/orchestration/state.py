@@ -24,6 +24,10 @@ AttackFamily = Literal["prompt_injection", "corpus_poisoning"]
 # Verdict alphabet matches the bundle JSON `evaluation.verdict` field.
 Verdict = Literal["success", "failure", "partial"]
 
+# Payload provenance — which generator path produced the payload. Day 5 was
+# template-only; Day 6 adds the "llm" path triggered on iteration >= 1.
+PayloadSource = Literal["template", "llm"]
+
 
 class RedTeamState(TypedDict, total=False):
     """State carried through one query's iteration loop in the LangGraph.
@@ -49,6 +53,10 @@ class RedTeamState(TypedDict, total=False):
     payload: str  # the adversarial document body (page_content)
     payload_doc_id: str  # added: lets the executor track + remove cleanly
     payload_metadata: dict[str, Any]
+    # Day 6: provenance flag — "template" on iteration 0, "llm" on retries.
+    # Bundle JSON (Day 8) lifts this directly so reviewers can see which
+    # generator path produced each recorded exploit.
+    payload_source: PayloadSource
 
     # --- executor output ----------------------------------------------------
     index_state_hash: str
