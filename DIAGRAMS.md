@@ -132,10 +132,35 @@ sequenceDiagram
 
 ---
 
-## 4. LangGraph workflow (placeholder — Day 5)
+## 4. LangGraph workflow
 
-The agentic loop will be a 4-node LangGraph: `plan → generate → execute → evaluate → loop`.
-Diagram added on Day 5 once the graph is wired.
+The agentic loop is a 4-node LangGraph: `plan → generate → execute → evaluate`,
+with one conditional edge back to `plan` (or to `END`) at the bottom of the loop.
+Day 5's planner is a deterministic round-robin over the two attack families;
+Day 6 swaps in an ε-greedy planner with success-rate memory. The evaluator
+computes only the ASR (Attack Success Rate) triple inline — RAGAS scoring
+arrives in Day 7's `metrics` module.
+
+The conditional-edge predicate (`should_continue`) ends the loop when the
+verdict is `"success"` (no point retrying a working exploit) **or** when the
+iteration counter has reached `max_iterations`. Otherwise it loops back to
+`plan` for another attack family.
+
+```mermaid
+flowchart TD
+    Start((Start)) --> Plan
+    Plan[plan<br/>round-robin: PI ↔ poisoning] --> Generate
+    Generate[generate<br/>build IPI / poison payload] --> Execute
+    Execute[execute<br/>add → run → remove<br/>try/finally cleanup] --> Evaluate
+    Evaluate[evaluate<br/>ASR-r / ASR-a / ASR-t<br/>verdict + history] --> Decide{should_continue?}
+    Decide -- "verdict==success<br/>or iter≥max" --> End((End))
+    Decide -- "else" --> Plan
+```
+
+The `try/finally` block inside `execute` guarantees that the payload's
+`doc_id` is removed from the Chroma index even if `RAGPipeline.run` raises;
+this is what keeps the `index_state_hash` invariant across the ~300-run
+experiment matrix on Day 9.
 
 ---
 

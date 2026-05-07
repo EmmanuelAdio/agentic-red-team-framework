@@ -318,3 +318,56 @@ This is exactly what the ASR-r/ASR-a/ASR-t decomposition (from AgentPoison, ref 
 
 ### Commit
 Day 4 work ready to commit. Suggested message: `Day 4: corpus poisoning (answer_replacement) + DIAGRAMS.md + cross-family ASR asymmetry`.
+
+---
+
+## 2026-05-07 — Day 5
+
+### What I did
+Wired the four agent nodes into a single LangGraph workflow — the "agentic" part of "agentic red-team framework" now exists. Both attack-family payload generators built on Days 3–4 are reachable through the same compiled graph; a single state dict (`RedTeamState`) flows through all four nodes; and the conditional edge from `evaluate` either loops back to `plan` for another iteration or terminates the run.
+
+- New `src/redteam/orchestration/state.py`. `RedTeamState` `TypedDict` matching spec §5 verbatim, plus one practical addition: `payload_doc_id` so the executor can flag retrieved chunks as poisoned and remove the payload during cleanup without re-deriving the id from `payload_metadata`. `total=False` so each node only writes the fields it owns.
+- New `src/redteam/orchestration/graph.py`. Four node functions plus a `build_graph(pipeline)` factory that returns a compiled LangGraph app:
+    - `plan_node` — round-robin: `attack_family = ["prompt_injection", "corpus_poisoning"][iteration % 2]`. Picks the default strategy per family (`instruction_override`, `answer_replacement`).
+    - `generate_node` — dispatches to `generate_ipi_payload` or `generate_poison_payload`. Stores `payload`, `payload_doc_id`, `payload_metadata` (including the marker substring the evaluator looks for in ASR-a).
+    - `execute_node` — `try: add_documents → pipeline.run → mark is_poisoned for matching chunks; finally: remove_documents`. Closure over a shared `RAGPipeline` so the embedding model and Chroma collection load once per graph build, not once per iteration.
+    - `evaluate_node` — inline ASR triple (whitespace-normalised substring match for ASR-a, same logic as the notebook's `run_attack` helper). Verdict: `success` if ASR-t else `partial` if ASR-r else `failure`. Appends one row per iteration to `history`. Increments `iteration` in the same update so the conditional edge sees the post-iteration counter.
+    - `should_continue` predicate — terminates on `verdict == "success"` (no point retrying a working exploit) or when `iteration >= max_iterations`. Otherwise loops to `plan`.
+- New `tests/test_orchestration.py`. Two tests: `test_planner_round_robin` (pure-Python, deterministic) and `test_graph_runs_one_iteration_round_trip` (live Chroma + cached LLM, asserts state-hash invariant after the run). **Total now 17 tests.**
+- Updated `DIAGRAMS.md` §4. Replaced the placeholder with a Mermaid `flowchart` of the compiled graph and a short paragraph documenting the `should_continue` predicate.
+- Extended `notebooks/02_attack_dev.ipynb` with a "Day 5 — LangGraph trace" section: builds the graph, invokes for `max_iterations=2`, renders `final_state["history"]` as a DataFrame so each iteration is visible. The notebook's existing final rollback assertion now covers both the manual attacks *and* this graph run — single-source-of-truth check that no path through the system leaks state into the index.
+
+### Decision: Day-5 sentinel for the corpus-poisoning target_answer
+The corpus-poisoning generator requires a `target_answer` (no default — it's query-specific). The graph's `generate_node` calls it with a fixed sentinel `"PoisonedAnswer1985"` for Day 5 so the workflow is self-contained. Day 6's LLM-driven exploit generator will pick query-specific plausible false answers (the lab note from Day 4 already flagged this — answer-class coherence is what differentiates "97% ASR" from "0% ASR" on poisoning attacks).
+
+### What worked
+- 17/17 tests pass.
+- The graph runs end-to-end on the demo query; the round-robin planner correctly alternates families across iterations.
+- Index `state_hash` byte-identical pre- and post-graph-invocation — the executor's `try/finally` cleanup composes correctly with LangGraph's node-by-node update semantics.
+- IPI iteration (round-robin index 0) reaches `verdict == "success"` on iteration 0; `should_continue` correctly short-circuits to `END` rather than running the second iteration when the first already succeeded.
+
+### Problems faced this session
+1. **`RetrievedDoc` vs dict in the test.** First draft of `test_graph_runs_one_iteration_round_trip` used dict subscripting (`d["doc_id"]`) on the result of `retriever.query()`, which returns `RetrievedDoc` dataclasses. Trivial fix (`d.doc_id`), but a useful reminder that the executor's payload of `state["retrieved_docs"]` is dicts (the pipeline's `run()` method serialises `RetrievedDoc` to dict shape) while `retriever.query()` directly returns dataclasses.
+2. **Where to increment `iteration`.** Considered three options: in the conditional edge function (illegal — edges only return strings, not state updates), via a small dedicated `increment` node (one-purpose node, premature), or inside `evaluate_node` as part of its update dict. Picked the third — `evaluate_node` is the only node that runs *exactly once per iteration*, and the conditional edge fires immediately after, so the post-iteration counter is what `should_continue` reads. Captured in the graph module's docstring.
+3. **`Document` reconstruction in `execute_node`.** The state dict carries `payload` (a string) and `payload_metadata` (a dict), not the original LangChain `Document` object. The executor reconstructs a `Document` with the same `doc_id` + metadata before calling `add_documents`. Alternative (carrying the Document through state) was rejected because TypedDict serialisation through LangGraph's checkpointer prefers JSON-friendly types — keeping state primitive-only now also makes the Day-8 bundle JSON write a one-step serialisation rather than two.
+
+### Key observation — graph-level rollback invariance
+
+The single most load-bearing property for the Day 9 ~300-run experiment matrix is that *every* path through the graph leaves the index in its pre-run state. This holds independently of: (i) which attack family the planner picked, (ii) whether the LLM complied, (iii) whether the iteration succeeded or failed, (iv) whether the loop short-circuited or ran to `max_iterations`. The `try/finally` inside `execute_node` is the local guarantor; the conditional-edge structure (which never re-enters `execute` without a paired `add → remove`) is the global guarantor. With both verified by `test_graph_runs_one_iteration_round_trip` and the notebook's rollback assertion, Day 9 can run unattended overnight without index drift.
+
+**Paragraph for Chapter 4 (Methodology):**
+
+> *The orchestration layer is implemented as a compiled four-node LangGraph (`plan → generate → execute → evaluate`) with a single conditional edge from `evaluate` either back to `plan` or to a terminal state. The graph carries a TypedDict state object (`RedTeamState`) populated incrementally by each node; node bodies return only the fields they write, with LangGraph performing dict-merge updates. The executor node wraps every payload-injection in a `try/finally` block such that `remove_documents` runs whether or not the downstream generator call raises; this is the local rollback guarantee. The conditional-edge structure ensures `execute` is never re-entered without a paired `add/remove`, providing the global rollback guarantee. Together these properties keep the Chroma index `state_hash` byte-identical across every run in the experiment matrix, allowing a single shared corpus to be reused without per-run rebuilds.*
+
+**Caveats for Chapter 7 (Discussion):**
+- The Day-5 planner is a deterministic round-robin, not adaptive. The "agentic" properties relevant to RQ2 (does adaptation improve attack success?) require Day 6's ε-greedy planner with success-rate memory; Day 5 establishes only that the orchestration substrate works.
+- The `evaluate_node`'s ASR triple is computed inline; the same logic moves to `redteam.metrics.asr` on Day 7 for parity with the dedicated RAGAS scorer. Until then, RAGAS triple fields stay `None` in the bundle JSON.
+
+### What's next (Day 6 — Planner agent + LLM-driven exploit generator)
+- Replace the round-robin planner with an ε-greedy planner (ε = 0.3) that maintains per-(query-type, attack-family) success-rate memory across iterations.
+- Add an `LLMExploitGenerator` that takes a plan + previous failure traces and produces a *new* payload variant — moves payload generation off the hand-templated path for the first time.
+- Specifically, the LLM generator should crack the asymmetry recorded on Day 4: hand-templated poisoning achieves ASR-r = 1.0 but ASR-a = 0.0; an LLM-crafted poisoned document that mimics NQ corpus style is the natural counterfactual.
+- TDD revisit point: defer one more day to Day 7 when the metrics module is the focus.
+
+### Commit
+Day 5 work ready to commit. Suggested message: `Day 5: LangGraph 4-node orchestration + round-robin planner (17/17 tests)`.
