@@ -33,6 +33,8 @@ Build, in 16 days, a working open-source agentic framework that autonomously pla
 - Defence implementation — explicitly evaluate attacks, not defences.
 - Multi-turn conversational attacks. Multimodal RAG. Custom corpus.
 
+See [`FUTURE_WORKS.md`](FUTURE_WORKS.md) for the consolidated, annotated register of every deferred idea (deployment surface, additional attack families, evaluator extensions, scale, etc.) with a *why-it-matters* hook per entry.
+
 ### Hard cost cap
 - OpenAI dashboard limit: **$50**. Use `gpt-4o-mini-2024-07-18`.
 - Or Ollama with `llama3.1:8b` locally — zero API cost, slower iteration.

@@ -369,5 +369,15 @@ The single most load-bearing property for the Day 9 ~300-run experiment matrix i
 - Specifically, the LLM generator should crack the asymmetry recorded on Day 4: hand-templated poisoning achieves ASR-r = 1.0 but ASR-a = 0.0; an LLM-crafted poisoned document that mimics NQ corpus style is the natural counterfactual.
 - TDD revisit point: defer one more day to Day 7 when the metrics module is the focus.
 
+### Addendum — `FUTURE_WORKS.md` register created mid-Day-5
+
+In the same session, after the Day-5 implementation landed, a question came up about whether the framework could be extended to attack user-supplied RAG endpoints (rather than the closed reference implementation we've built), and whether a web dashboard could still fit before submission. Both ideas are out of scope for the deadline — but worth recording rather than re-discovering. Created `FUTURE_WORKS.md` at the repo root: a categorised register of every deferred idea raised across this multi-day session, each entry tagged with a status flag (*blocked-by-deadline*, *blocked-by-scope-discipline*, *blocked-by-threat-model*, *legitimate-stretch*) and a *why-it-matters* hook for direct lift into Chapter 8.
+
+The dashboard idea specifically: `notebooks/03_results_analysis.ipynb` (already in spec §8) is the planned deadline-scope equivalent — same audience and same purpose for half the cost. Streamlit / Gradio is logged in `FUTURE_WORKS.md` §1.2 as a Day-16-buffer stretch only.
+
+The user-supplied-endpoint idea: logged in §1.1 with the trade-offs (corpus-poisoning collapses without write access; `index_state_hash` reproducibility property weakens because target state can't be pinned; CFAA / Computer Misuse Act surface). Crucially, the architectural seam already exists — the executor depends on `RAGPipeline.run(query) → dict` only — so the future-work effort is HTTP adapter + auth + response-shape negotiation, not a redesign. That framing is the supervisor / demo pitch: *closed-system-as-deliberate-methodological-choice*, not *closed-system-as-limitation*.
+
+Cross-linked from `PROJECT_SPEC.md` §2 ("Defer to Future Work" list) so any reader of the spec can find the annotated register without searching.
+
 ### Commit
-Day 5 work ready to commit. Suggested message: `Day 5: LangGraph 4-node orchestration + round-robin planner (17/17 tests)`.
+Day 5 work ready to commit. Suggested message: `Day 5: LangGraph 4-node orchestration + round-robin planner (17/17 tests) + FUTURE_WORKS.md register`.
