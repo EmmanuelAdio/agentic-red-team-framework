@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import json; nb=json.load\\(open\\('notebooks/02_attack_dev.ipynb','r',encoding='utf-8'\\)\\); cells=nb['cells']; print\\('Total cells:', len\\(cells\\)\\); [print\\(i, c['cell_type'], \\(''.join\\(c['source']\\) if isinstance\\(c['source'],list\\) else c['source']\\)[:90].replace\\('\\\\n',' | '\\)\\) for i,c in enumerate\\(cells[-15:]\\)]\")",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/test_metrics_asr.py -v)",
+      "Bash(python -m pytest tests/ --ignore=tests/test_metrics_ragas.py)"
+    ]
+  }
+}

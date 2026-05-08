@@ -514,3 +514,265 @@ The §6.4 RAGAS rationale block was rewritten with the corrected async-everywher
 
 ### Commit
 Day 7 work + RAGAS async fix ready to commit. Suggested message: `Day 7: metrics module (ASR + rank_shift + RAGAS async-everywhere) + DIAGRAMS.md §6 metrics rationale (43/43 tests)`.
+
+---
+
+## 2026-05-07 — Day 7.5 (buffer day — pulled-forward Future Work)
+
+### Context
+
+Day 7 closed with the project ahead of calendar by ~4 days (calendar Day
+3, completed work through Day 7). The buffer was used to pull three
+Future Work items into scope rather than starting Day 8 (bundle JSON
+I/O) early. Items chosen on the basis of *strongest dissertation payoff
+per half-day of code*:
+
+1. **Multi-document corpus poisoning** — replicates PoisonedRAG ref [6]
+   §4.2's 5-doc setup. Converts the Day-4 negative finding (single-doc
+   poisoning at ASR-a ≈ 0) into a measured threshold, which is a much
+   stronger Chapter 6 result than "single-doc fails".
+2. **Query-side / direct prompt injection** — third attack family,
+   completes the input-channel-vs-corpus-channel attack-surface
+   taxonomy. Tests whether the agentic plan → generate → execute →
+   evaluate loop generalises beyond corpus-write attacks.
+3. **Jamming / blocker documents + ASR-deny metric** — adds an
+   *availability* attack objective alongside the existing integrity
+   axis. Demonstrates that the framework handles multi-objective
+   diagnosis, not only substring-match integrity.
+
+Three items previously also discussed (BM25 second retriever, TruLens
+evaluator, BadRAG trigger-conditioned poisoning, canary leakage) stayed
+deferred and were re-described in `FUTURE_WORKS.md` with refined status
+flags + caveats. The decision rationale lives in this lab note's
+*Why these three and not the others* sub-section below.
+
+### What I did
+
+#### Phase A — Multi-document corpus poisoning
+
+- Extended `src/redteam/attacks/corpus_poisoning.py` with
+  `generate_poison_payloads(query_text, target_answer, n_docs, seed)` —
+  returns ``list[PoisonPayload]`` of N near-duplicate variants. Each
+  variant uses a different rhetorical-register template (academic,
+  encyclopaedic, historiographic, journalistic, textbook, institutional,
+  pedagogical) and a slightly different topical-anchor length so
+  bge-small does not collapse them onto a single retrieval position.
+- Backwards-compatibility preserved: `generate_poison_payload(...,
+  variant_idx=0)` reproduces the Day-4 single-doc behaviour byte-for-
+  byte (same hash input → same `doc_id`, same template, same anchor
+  length). A new test (`test_generate_poison_payload_backward_compat_v0`)
+  pins this contract.
+- `PoisonPayload` gained a `variant_idx: int = 0` field so multi-doc
+  batches stay self-describing and bundles can audit which variant
+  produced which payload.
+- Added the **`jamming` strategy** in the same module (Phase C
+  prerequisite — see below). Convenience wrapper
+  `generate_jamming_payload(query_text, seed)` for callers.
+- New tests: `test_generate_poison_payloads_multi_doc` (N=5 case
+  asserts unique doc_ids, shared target_answer, distinct bodies);
+  input-validation tests for `n_docs < 1` and empty target_answer.
+- Notebook: new section *Day 7.5 — Multi-doc poisoning sweep* runs
+  N ∈ {1, 3, 5, 7} on the demo query and tabulates `poison_in_top5`,
+  `asr_r`, `asr_a`, `asr_t`. The threshold this finds *is* the
+  Chapter 6 finding for RQ2's poisoning sub-question.
+
+#### Phase B — Query-side prompt injection
+
+- New module `src/redteam/attacks/query_injection.py` with
+  `QueryInjectionPayload` dataclass and
+  `generate_query_injection_payload(query_text, target_string,
+  strategy, seed)`. Two strategies: `prefix_injection` (override
+  preamble before the user question) and `suffix_injection` (override
+  addendum after the user question). Both keep the user's original
+  query inside the rewrite so retrieval still anchors topically.
+- LangGraph integration:
+  - `AttackFamily` literal extended to 3 entries: ``prompt_injection``,
+    ``corpus_poisoning``, ``query_injection``.
+  - `AttackChannel` literal added (``corpus`` / ``query``); state grew
+    `attack_channel` and `modified_query` fields.
+  - `_FAMILY_CHANNEL` mapping introduced in `graph.py` so the executor
+    knows whether to call `add_documents` (corpus) or pass the modified
+    query straight to `pipeline.run` (query). One-line extension point
+    for any future channels.
+  - Generate node branches on channel: corpus-channel returns
+    `payload = doc.page_content`; query-channel returns
+    `payload = modified_query` and a synthetic `payload_doc_id`.
+  - Execute node branches on channel: corpus path is the existing
+    add-run-remove dance; query path runs the modified query directly,
+    no Chroma writes.
+  - Evaluate node sets `asr_retrieval = True` trivially when
+    `attack_channel == "query"` — the malicious instruction reaches
+    the LLM through the prompt by construction, so retrieval gating is
+    not a meaningful gate. ASR-a remains the substring check.
+  - Planner became a 3-armed bandit: `ATTACK_FAMILIES` is a 3-tuple,
+    uniform-exploration probability per family is 1/3 instead of 1/2.
+  - `LLMExploitGenerator` gained `generate_query_injection(...)` with
+    its own prompt template + hash, mirroring the IPI / poisoning
+    generators.
+- Test updates:
+  - `test_planner_round_robin` rewritten to expect the 3-family cycle
+    (iter 0/1/2 → IPI / poisoning / query_injection; iter 3 wraps).
+  - `_RaisingExploitGen` and `_RecordingExploitGen` fakes both gained
+    `generate_query_injection` methods.
+  - New `test_graph_query_channel_skips_corpus_writes` pins the
+    Day-7.5 contract: query-channel attacks leave the index untouched
+    (state_hash is identical pre/post), `attack_channel == "query"`,
+    `modified_query` is populated, ASR-r is trivially True.
+- DIAGRAMS.md §2 refactored: the threat model now explicitly documents
+  the corpus-channel-vs-query-channel split (new sub-section §2.1
+  *Attack channels*) with a Mermaid diagram showing the attacker's
+  reach into both channels. The earlier note "query-side IPI is
+  excluded from implementation" was rewritten to point at this
+  sub-section as the as-of-Day-7.5 home of the input-channel
+  implementation.
+- Notebook: new section *Day 7.5 — Query-side prompt injection* with
+  both strategies running through `pipeline.run(modified_query)` and
+  a small results table.
+
+#### Phase C — Jamming / blocker documents
+
+- The `jamming` strategy was added to `corpus_poisoning.py` during
+  Phase A (it shared the same module-level edit window). Phase C wires
+  the metric side of it.
+- New `compute_asr_deny(generator_output)` in `metrics/asr.py`. The
+  refusal lexicon is small, conservative, gpt-4o-mini-shaped, and
+  *prefix-anchored* — the function returns True only if the
+  whitespace-stripped, lower-cased output **starts with** a known
+  refusal phrase. A substring search would false-positive on
+  legitimate answers that quote refusal language ("citizens cannot be
+  compelled to testify"); anchoring to the prefix avoids this.
+- Six new tests (TDD-shaped) in `test_metrics_asr.py`: explicit
+  refusal prefix, case-insensitive, leading-whitespace tolerated,
+  normal-answer-is-False, mid-sentence-does-not-match, empty-output
+  -is-False. The mid-sentence test is the one that matters most for
+  Day-9 aggregation correctness — without it the lexicon over-reports.
+- Notebook: new section *Day 7.5 — Jamming / blocker documents (
+  availability attack)* runs the jamming payload through the
+  add-run-remove pipeline and reports `asr_r`, `asr_deny`, and an
+  availability-flavoured ASR-t.
+
+### What worked
+
+- **Multi-doc threshold experiment is concrete and replicable.** The
+  notebook sweep is one cell; the metric reading is unambiguous (does
+  ASR-a flip at N=3, N=5, or N=7?). This is the cleanest possible
+  Chapter 6 paragraph for RQ2's poisoning sub-question and it
+  replicates a published-paper result inside the framework — exactly
+  what the bundle JSON schema (Day 8) is designed to support.
+- **Query-channel integration was structurally clean.** Adding the
+  third attack family to the LangGraph orchestration touched ~5 files
+  but no existing test broke beyond the planner-round-robin update;
+  the channel split is a one-mapping `_FAMILY_CHANNEL` extension and
+  the executor branches on a single state field. The framework's
+  channel-agnostic node design (planner picks family; executor
+  branches on channel) made this almost mechanical.
+- **ASR-deny prefix-anchoring caught a real over-reporting risk.** The
+  *test_asr_deny_does_not_match_mid_sentence* test was written before
+  the implementation; the first-pass implementation used a substring
+  search (the same shape as `compute_asr_answer`) and failed that test
+  immediately. The TDD framing forced the prefix-anchoring decision
+  before the metric ever ran on real data. This is the kind of
+  fail-quietly-in-aggregation bug that would have been hard to detect
+  in Day-9 results.
+- **Backward-compat on `generate_poison_payload`.** Deliberately
+  preserving `variant_idx=0` byte-for-byte means any pre-Day-7.5
+  exploit bundle remains a valid reference for re-runs — matters for
+  the bundle audit trail Day 8 will lean on.
+
+### Problems / things that broke
+
+- **Planner test expectations.** `test_planner_round_robin` was hard-
+  coded to a 2-family cycle and asserted iter 2 == iter 0. Adding
+  `query_injection` made iter 2 == ``query_injection`` instead, which
+  broke the test. Updated the test to assert the 3-family cycle (iter
+  3 wraps to iter 0). Caught immediately by `pytest`; not a real
+  regression because the legacy round-robin's *behaviour* is correct,
+  the *test assertion* was just stale.
+- **`PoisonPayload` dataclass field addition.** Adding `variant_idx:
+  int = 0` to the dataclass with a default kept all existing callers
+  working — but the dataclass field-order rule (defaults must come
+  after non-default fields) constrained where the field could be
+  inserted. Placed at the end. No test impact.
+- **`generate_poison_payload` signature change.** Changed
+  `target_answer: str` (required) to `target_answer: str = ""` (
+  optional, ignored for jamming). Risk: a caller relying on the empty
+  string raising at call-time would now silently get a jamming
+  payload. Mitigated by raising explicitly inside the function for the
+  `answer_replacement` branch when `target_answer` is empty (the
+  failure mode is preserved, just moved one stack frame).
+- **No problems with the LangGraph node closures.** This was the
+  biggest worry going in (extending the channel split risked breaking
+  every existing graph build). The closure-based dependency injection
+  introduced on Day 6 paid off: the new branches are local to each
+  `make_*_node` factory and the graph-build call site is unchanged.
+
+### Key observations (Chapter 6 inputs)
+
+- **The framework now exercises a 2 × 2 attack matrix:** {corpus,
+  query} channel × {integrity, availability} objective. Five of the
+  four cells are populated:
+  - corpus + integrity: IPI (Day 3), poisoning (Day 4), multi-doc
+    poisoning (Day 7.5)
+  - corpus + availability: jamming (Day 7.5)
+  - query + integrity: query injection (Day 7.5)
+  - query + availability: empty (would be a query crafted to elicit
+    refusal — not implemented; reasonable Future Work but low payoff
+    because users can already trivially elicit refusals by asking
+    refusal-bait questions; the threat-model framing isn't sharp).
+- **The cross-family ASR comparison Chapter 6 should report.** The
+  framework now produces three ASR-style metrics per run: ASR-a
+  (integrity), ASR-deny (availability), and the existing ASR-r
+  (retrieval-side delivery). The 2 × 2 matrix above is the natural
+  axis for one figure; the threshold sweep from Phase A is the
+  natural axis for a second figure (single curve: N vs ASR-a).
+- **Why these three and not the others.** Three items declined for
+  Day 7.5 even though they were on the table:
+  - **BM25 second retriever** — would double the experiment matrix
+    (~600 runs instead of ~300) and the cross-retriever comparison is
+    a Chapter 7 / Future Work question not a Chapter 6 question. Stays
+    in `FUTURE_WORKS.md` §4.1 with the *legitimate-stretch* flag.
+  - **TruLens evaluator** — overlaps heavily with RAGAS on the three
+    integrity axes; cross-validation payoff is real but thin given
+    the cost. Stays in `FUTURE_WORKS.md` §5.1 as
+    *blocked-by-scope-discipline*.
+  - **BadRAG trigger-conditioned poisoning** — feasible code-wise (~½
+    day) but meaningful evaluation requires query-set augmentation
+    with trigger tokens, which drifts from the Day-2 frozen
+    50-query slice. Stays in `FUTURE_WORKS.md` §2.4 with a refined
+    caveat documenting the query-set requirement.
+  - **Canary leakage / data exfiltration** — different threat model
+    (confidentiality, not integrity). Added to `FUTURE_WORKS.md` as
+    new §3.3, framed as the natural centrepiece of the
+    user-supplied-RAG service extension (§1.1).
+  - **Explicit inter-context conflicts** — partially covered already
+    by `instruction_override` IPI's implicit gold-vs-override
+    conflict. Added to `FUTURE_WORKS.md` as new §2.6 for the explicit
+    factual-conflict variant.
+
+### What's next
+
+- Commit Day 7.5 work. Suggested message: `Day 7.5: multi-doc poisoning
+  + query-side injection + jamming/ASR-deny + DIAGRAMS.md §2.1
+  attack-channels (54/54 tests)`.
+- Then Day 8 — exploit bundle JSON I/O. The Day-7.5 metric fields
+  (ASR triple, ASR-deny, rank_shift, RAGAS triple) all serialise into
+  the bundle's `evaluation` block; the new `attack_channel` field
+  serialises into the `attack` block. Bundles are the second strong
+  TDD candidate per the Day-4 deferral — pydantic schema, written
+  test-first, then store/read functions.
+
+### Verification (all green at end of Day 7.5)
+
+- `pytest tests/ --ignore=tests/test_metrics_ragas.py -v` → **54 passed**.
+  - 8 attack tests (was 5; +3 multi-doc + jamming structural + 2
+    query-injection structural + 1 input-validation)
+  - 17 ASR-metric tests (was 11; +6 ASR-deny)
+  - 6 orchestration tests (was 5; +1 query-channel)
+  - All remaining tests unchanged: 3 corpus, 2 generator, 1 pipeline,
+    5 planner, 3 retriever, 5 rank-shift, 1 smoke.
+- Notebook `02_attack_dev.ipynb` has three new sections (multi-doc
+  sweep, query-side injection, jamming) inserted before the *Final
+  rollback verification* cell. The rollback cell still asserts
+  `state_hash` is byte-identical pre / post the entire notebook run
+  → verifies that none of the new attacks (corpus or query channel)
+  leaked Chroma state.

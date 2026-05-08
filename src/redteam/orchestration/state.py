@@ -18,8 +18,22 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, TypedDict
 
-# Attack family is a closed set per spec S2 ("Two attack families only").
-AttackFamily = Literal["prompt_injection", "corpus_poisoning"]
+# Attack family — was a 2-element closed set per spec S2 ("Two attack
+# families only"); Day 7.5 adds `query_injection` as the third family
+# (input-channel attack), pulled in from FUTURE_WORKS §2.1 during the
+# Day-7 buffer. The framework now exercises both the corpus channel
+# (prompt_injection + corpus_poisoning) and the input channel
+# (query_injection); Chapter 6 reports the cross-channel attack-surface
+# taxonomy.
+AttackFamily = Literal["prompt_injection", "corpus_poisoning", "query_injection"]
+
+# Attack delivery channel. `corpus` covers the IPI / poisoning families
+# (payload reaches the LLM through retrieval); `query` covers the
+# query_injection family (payload reaches the LLM through the prompt
+# directly). The executor branches on this field; the evaluator treats
+# `attack_channel == "query"` as `asr_retrieval = True` trivially since
+# there is no retrieval gating to bypass on the input channel.
+AttackChannel = Literal["corpus", "query"]
 
 # Verdict alphabet matches the bundle JSON `evaluation.verdict` field.
 Verdict = Literal["success", "failure", "partial"]
@@ -50,13 +64,22 @@ class RedTeamState(TypedDict, total=False):
     max_iterations: int
 
     # --- exploit-generator output ------------------------------------------
-    payload: str  # the adversarial document body (page_content)
+    payload: str  # adversarial doc body for corpus attacks; modified query for query attacks
     payload_doc_id: str  # added: lets the executor track + remove cleanly
     payload_metadata: dict[str, Any]
     # Day 6: provenance flag — "template" on iteration 0, "llm" on retries.
     # Bundle JSON (Day 8) lifts this directly so reviewers can see which
     # generator path produced each recorded exploit.
     payload_source: PayloadSource
+    # Day 7.5: attack delivery channel. The executor branches on this:
+    # `corpus` runs `add_documents` then `pipeline.run(query)`; `query`
+    # runs `pipeline.run(modified_query)` and adds nothing to the index.
+    # Defaults to `corpus` when absent so existing IPI/poisoning code
+    # paths are unaffected.
+    attack_channel: AttackChannel
+    # Day 7.5: query-channel-only field — the attacker-rewritten query the
+    # LLM actually sees. Empty / absent for corpus-channel attacks.
+    modified_query: str
 
     # --- executor output ----------------------------------------------------
     index_state_hash: str

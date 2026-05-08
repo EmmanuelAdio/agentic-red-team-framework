@@ -11,6 +11,7 @@ supervisor / demo conversations about the framework's natural extension axes.
 - *blocked-by-scope-discipline* — explicitly excluded by `PROJECT_SPEC.md` §2 to keep the deliverable focused.
 - *blocked-by-threat-model* — would require relaxing the project's black-box-with-corpus-write threat model.
 - *legitimate-stretch* — small enough to consider for the Day-16 buffer if everything else lands clean.
+- *implemented-mid-project* — originally deferred, pulled into scope during the Day-7 buffer when the project ran ahead of schedule. Entries kept here as historical record; see `LAB_NOTEBOOK.md` Day 7.5 for the rationale and the implementation pointer.
 
 The framework's contribution is the *methodology* — the agentic
 plan → generate → execute → evaluate loop, the ASR (Attack Success Rate)
@@ -74,16 +75,22 @@ open-source-tooling angle.
 
 ## 2. Attack-family extensions (within the current threat model)
 
-### 2.1 Query-side / direct prompt injection (GGPP-style) *(blocked-by-scope-discipline)*
+### 2.1 Query-side / direct prompt injection (GGPP-style) *(implemented-mid-project)*
 
 Attacker modifies the user's query before retrieval (rather than poisoning
 documents the retriever pulls).
 
 *Why it matters:* second axis of attack delivery; complements the
-corpus-side IPI work. `PROJECT_SPEC.md` §2 lists this as "only if Day 6
-finishes early".
+corpus-side IPI work. `PROJECT_SPEC.md` §2 originally listed this as
+"only if Day 6 finishes early".
 
-### 2.2 Multi-document corpus poisoning (PoisonedRAG 5-doc setup) *(blocked-by-deadline)*
+*Implementation pointer:* `src/redteam/attacks/query_injection.py`,
+LangGraph third family branch, notebook section *Day 7.5 — Query-side
+injection*. Pulled in during the Day-7 buffer so Chapter 6 can present
+the full input-channel-vs-corpus-channel attack-surface taxonomy rather
+than just the corpus channel.
+
+### 2.2 Multi-document corpus poisoning (PoisonedRAG 5-doc setup) *(implemented-mid-project)*
 
 Insert *N* poisoned documents per query rather than one, drowning the gold
 document in adversarial context.
@@ -94,7 +101,31 @@ PoisonedRAG paper hits 97% ASR with 5 docs. This is the **single most
 natural counterfactual** to the Day-4 cross-family asymmetry finding and
 the most defensible follow-up experiment.
 
-### 2.3 BadRAG-style trigger-conditioned poisoning *(blocked-by-deadline)*
+*Implementation pointer:* `generate_poison_payloads(n_docs=N)` in
+`src/redteam/attacks/corpus_poisoning.py`, notebook section *Day 7.5 —
+Multi-doc poisoning sweep* (N ∈ {1, 3, 5, 7}). Pulled in during the
+Day-7 buffer because it converts the Day-4 negative finding into a
+measured threshold — the strongest single Chapter 6 result available
+for the time cost.
+
+### 2.3 Jamming / blocker documents (availability attack) *(implemented-mid-project)*
+
+Poisoned document designed to make the LLM refuse to answer or stall —
+an availability attack rather than an integrity attack. Distinct success
+criterion: ASR-deny (output matches a refusal pattern), not ASR-a
+(output contains a target string).
+
+*Why it matters:* demonstrates that the framework handles multiple
+attack *objectives*, not only substring-match integrity. Strengthens the
+C1 contribution (multi-dimensional diagnosis) by widening it from a
+single integrity axis to integrity + availability.
+
+*Implementation pointer:* `jamming` strategy in
+`src/redteam/attacks/corpus_poisoning.py`, `compute_asr_deny` in
+`src/redteam/metrics/asr.py`, notebook section *Day 7.5 — Jamming /
+blocker documents*.
+
+### 2.4 BadRAG-style trigger-conditioned poisoning *(blocked-by-deadline)*
 
 Poisoned document only fires when the query contains a specific trigger
 substring; otherwise the document remains dormant in the corpus.
@@ -103,7 +134,16 @@ substring; otherwise the document remains dormant in the corpus.
 poisoning is invisible until the trigger query arrives. Strengthens the
 realism of the threat model.
 
-### 2.4 CorruptRAG-style stealth poisoning *(blocked-by-deadline)*
+*Specific evaluation caveat:* meaningful evaluation requires a query set
+that **contains the trigger token in some queries**. Day 2's 50 NQ
+queries are sampled from BeIR/NQ and don't naturally carry an attacker's
+chosen trigger string. Two follow-up paths: (a) augment the query set
+with a hand-authored trigger-bearing slice (artificial but cheap), or
+(b) train the trigger to a frequent NQ token and report under that
+constraint. Either path is a defensible Future Work paragraph rather
+than a Day-9-matrix extension.
+
+### 2.5 CorruptRAG-style stealth poisoning *(blocked-by-deadline)*
 
 Poisoned document mimics the genuine corpus's stylistic register so manual
 human review can't distinguish it from real entries.
@@ -111,7 +151,24 @@ human review can't distinguish it from real entries.
 *Why it matters:* defeats human-in-the-loop corpus auditing — the most
 common defensive control today.
 
-### 2.5 Multi-turn conversational attacks *(blocked-by-scope-discipline)*
+### 2.6 Explicit inter-context conflicts *(blocked-by-deadline)*
+
+Stage two factually contradictory documents in the corpus (e.g. a true
+NQ passage plus a fabricated counter-passage that asserts the opposite
+claim) and observe how the LLM reconciles them — without an explicit
+override instruction.
+
+*Why it matters:* the current `instruction_override` IPI strategy
+already produces an inter-context conflict implicitly (legitimate gold
+doc + override-doc both retrieved, LLM resolves toward the override).
+The *explicit-conflict* version isolates the **factual-conflict
+resolution behaviour** from the *instruction-following* behaviour —
+useful for separating two confounded mechanisms in Chapter 6's
+discussion. Largely a relabel of single-doc poisoning with a different
+framing of the success criterion (does the LLM cite the false doc, the
+true doc, or hedge?), so cheap to add but moderate value.
+
+### 2.7 Multi-turn conversational attacks *(blocked-by-scope-discipline)*
 
 Build the attack across multiple turns of a conversation rather than
 single-turn QA.
@@ -140,6 +197,28 @@ Extend the target system from text-only retrieval to multimodal indexing.
 *Why it matters:* production RAG systems increasingly index non-text
 content (PDFs, screenshots, tabular data); the attack surface expands
 correspondingly.
+
+### 3.3 Canary leakage / data-exfiltration attacks *(blocked-by-threat-model)*
+
+Plant canary tokens (unique synthetic strings, e.g. `CANARY_7f3a9c12`)
+into the retrieval corpus, then craft attacker queries / documents that
+attempt to coax the LLM into emitting the canary. ASR variant:
+`ASR-leak` (substring-match the canary in the generator output).
+
+*Why it matters:* tests **confidentiality** (data exfiltration) rather
+than integrity, opening a third orthogonal axis alongside the current
+integrity (false-answer) and availability (jamming) attack objectives.
+Particularly compelling in the *user-supplied RAG endpoint* extension
+(§1.1) where end-users index private documents — canary leakage is the
+natural threat-model framing for a red-team-as-a-service product.
+
+*Why deferred:* the current spec §3 threat model is integrity-focused
+(corpus-write attacker aiming to corrupt outputs). Canary leakage
+reframes the adversary as a confidentiality-breach attacker
+(exfiltration of data the corpus owner intended to keep private). That
+reframing is large enough to deserve its own threat-model section and
+its own RQ — not a Day-9-matrix extension, but a strong centrepiece for
+the deployment-surface Future Work in §1.
 
 ---
 

@@ -23,8 +23,16 @@ from dataclasses import dataclass, field
 
 from redteam.orchestration.state import AttackFamily
 
-# The two attack families this project supports (spec §2 — closed set).
-ATTACK_FAMILIES: tuple[AttackFamily, ...] = ("prompt_injection", "corpus_poisoning")
+# The attack families this project supports. Originally a 2-element closed
+# set (spec §2 — IPI + corpus poisoning); Day 7.5 added `query_injection`
+# as the third family (input-channel attack pulled in from FUTURE_WORKS §2.1
+# during the Day-7 buffer). The ε-greedy planner is now a 3-armed bandit;
+# uniform-exploration probability per family becomes 1/3 instead of 1/2.
+ATTACK_FAMILIES: tuple[AttackFamily, ...] = (
+    "prompt_injection",
+    "corpus_poisoning",
+    "query_injection",
+)
 
 
 @dataclass

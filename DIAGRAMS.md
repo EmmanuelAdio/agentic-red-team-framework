@@ -156,22 +156,78 @@ also has a methodological pay-off: corpus-write capability is what makes
 both attack families tractable on the *same* infrastructure (insert via
 `Retriever.add_documents`), keeping the experiment matrix uniform.
 
-**Why is "modify queries pre-retrieval" granted but query-side / direct
-prompt injection still excluded from the implementation?** The capability
-is granted in the threat model for completeness (real attackers in
-EchoLeak-style scenarios *do* control the inbound message). The
-implementation is corpus-side-only because (a) spec §2 forces the "drop
-the third" rule for scope discipline and (b) corpus-side IPI is the more
-novel attack surface — query-side IPI has been studied since 2022, while
-indirect (corpus-side) IPI is the active research frontier (Greshake et
-al., 2023; EchoLeak, 2025). Query-side IPI is logged in
-`FUTURE_WORKS.md` §2.1 as a Day-6-stretch / future axis.
+**Why is "modify queries pre-retrieval" granted in the threat model?**
+Real attackers in EchoLeak-style scenarios (compromised middleware,
+prompt-laundering proxy, malicious copy-paste source) *do* control the
+inbound message. As of Day 7.5 the framework also **implements** this
+capability — see *§2.1 Attack channels* below.
 
 **Alternatives considered + rejected.** A *fully* black-box threat model
 (no corpus write) was rejected because it collapses corpus-poisoning
-entirely — leaving only query-side attacks, which are out of scope. A
-*grey-box* model (attacker sees retrieval scores but not embeddings) was
-rejected as adding complexity without research-question payoff.
+entirely. A *grey-box* model (attacker sees retrieval scores but not
+embeddings) was rejected as adding complexity without research-question
+payoff. White-box variants (GASLITE, Joint-GCG) — embedding-weight access
+and gradient-optimised payloads — are stricter than the production-realistic
+threat profile and stay deferred (`FUTURE_WORKS.md` §3.1).
+
+### 2.1 Attack channels (Day-7.5 expansion)
+
+The threat model splits the attacker's reach into two **delivery
+channels**, both granted, both implemented:
+
+```mermaid
+flowchart LR
+    Attacker((Attacker))
+
+    subgraph CORPUS_CH["CORPUS channel"]
+        IPI[Indirect prompt injection<br/>add override doc to corpus]
+        Poison[Corpus poisoning<br/>add false-fact doc to corpus]
+        MultiPoison[Multi-doc poisoning<br/>N docs to flood top-k]
+    end
+
+    subgraph QUERY_CH["QUERY channel"]
+        QPrefix[Query prefix injection<br/>preamble before user question]
+        QSuffix[Query suffix injection<br/>addendum after user question]
+    end
+
+    Attacker -->|writes to| IPI
+    Attacker -->|writes to| Poison
+    Attacker -->|writes to| MultiPoison
+    Attacker -->|rewrites| QPrefix
+    Attacker -->|rewrites| QSuffix
+
+    IPI -->|reaches LLM via retrieval| LLM[LLM prompt]
+    Poison -->|reaches LLM via retrieval| LLM
+    MultiPoison -->|reaches LLM via retrieval| LLM
+    QPrefix -->|reaches LLM via input| LLM
+    QSuffix -->|reaches LLM via input| LLM
+```
+
+**Why two channels matter for the dissertation.** The two channels
+exercise *different* LLM defences:
+
+- **Corpus-channel** attacks (IPI + poisoning) succeed by *retrieval
+  arithmetic*: getting the payload into top-k. Failure modes are
+  retrieval-side (gold doc co-retrieves, payload deduplicated) more than
+  LLM-side. The Day-4 negative finding (single-doc poisoning at ASR-a ≈
+  0) and the Day-7.5 multi-doc threshold sweep both live in this regime.
+- **Query-channel** attacks succeed by *prompt persuasion*: getting the
+  LLM to follow the injection over the retrieved context. Failure modes
+  are LLM-side (instruction-following defences, system-prompt priority).
+
+Chapter 6 reports the cross-channel split: ASR-r is trivially `True` for
+the query channel (no retrieval gating to bypass), so the channel
+comparison is purely an ASR-a comparison. This is the cleanest split
+available between *retrieval-side* and *LLM-side* attack mechanisms
+within the project's black-box-with-write threat model.
+
+**Implementation note.** Both channels go through the same
+`plan → generate → execute → evaluate` LangGraph nodes; only the
+executor branches on `state["attack_channel"]`. Adding a third channel
+in future (e.g. system-prompt injection if/when granted) would mean one
+new `_FAMILY_CHANNEL` entry, one new executor branch, and one new
+evaluator special-case for ASR-r — the rest of the orchestration is
+channel-agnostic by design.
 
 ---
 

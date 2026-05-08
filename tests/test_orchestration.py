@@ -35,6 +35,7 @@ from redteam.attacks.prompt_injection import (
     IPIPayload,
     topical_anchor,
 )
+from redteam.attacks.query_injection import QueryInjectionPayload
 from redteam.config import CHROMA_DIR, DATA_DIR, EMBEDDING_MODEL, load_env
 from redteam.orchestration.graph import build_graph, plan_node
 from redteam.orchestration.state import RedTeamState
@@ -49,23 +50,35 @@ from redteam.target.retriever import Retriever
 
 
 def test_planner_round_robin() -> None:
-    """Legacy `plan_node` (round-robin) alternates families on consecutive iterations."""
+    """Legacy `plan_node` (round-robin) cycles families on consecutive iterations.
+
+    Day 7.5 expanded the family set from 2 to 3 (added `query_injection`),
+    so the cycle length is now 3: iter 3 returns to iter 0's family rather
+    than iter 2 doing so.
+    """
     s0: RedTeamState = {"iteration": 0}
     s1: RedTeamState = {"iteration": 1}
     s2: RedTeamState = {"iteration": 2}
+    s3: RedTeamState = {"iteration": 3}
 
     out0 = plan_node(s0)
     out1 = plan_node(s1)
     out2 = plan_node(s2)
+    out3 = plan_node(s3)
 
     assert out0["attack_family"] == "prompt_injection"
     assert out1["attack_family"] == "corpus_poisoning"
-    assert out2["attack_family"] == out0["attack_family"]
+    assert out2["attack_family"] == "query_injection"
+    # Cycle wraps: iter 3 % 3 == 0, so family matches iter 0.
+    assert out3["attack_family"] == out0["attack_family"]
     assert out0["attack_strategy"] == "instruction_override"
     assert out1["attack_strategy"] == "answer_replacement"
-    # Day 6 addition: the legacy node now also writes payload_source.
+    assert out2["attack_strategy"] == "prefix_injection"
+    # Day 6 addition: the legacy node also writes payload_source.
+    # iter 0 → template; iter ≥ 1 → llm.
     assert out0["payload_source"] == "template"
     assert out1["payload_source"] == "llm"
+    assert out2["payload_source"] == "llm"
 
 
 def test_graph_runs_one_iteration_round_trip() -> None:
@@ -137,6 +150,11 @@ class _RaisingExploitGen:
             "LLM exploit generator was called on iteration 0 — should be template path"
         )
 
+    def generate_query_injection(self, *args, **kwargs):
+        raise AssertionError(
+            "LLM exploit generator was called on iteration 0 — should be template path"
+        )
+
 
 @dataclass
 class _RecordingExploitGen:
@@ -149,10 +167,12 @@ class _RecordingExploitGen:
 
     ipi_calls: list[dict] = None
     poison_calls: list[dict] = None
+    query_injection_calls: list[dict] = None
 
     def __post_init__(self):
         self.ipi_calls = []
         self.poison_calls = []
+        self.query_injection_calls = []
 
     def generate_ipi(self, query_text, target_string=DEFAULT_TARGET_STRING,
                      strategy="instruction_override", iteration=1, prior_failures=None):
@@ -211,6 +231,27 @@ class _RecordingExploitGen:
             document=document,
             target_answer=target_answer,
             strategy="answer_replacement",
+            query_text=query_text,
+        )
+        return payload, GenerationTrace(latency_ms=0.0, prompt_template_hash="sha256:fake")
+
+    def generate_query_injection(self, query_text, target_string=DEFAULT_TARGET_STRING,
+                                 strategy="prefix_injection", iteration=1, prior_failures=None):
+        self.query_injection_calls.append({
+            "query": query_text, "iteration": iteration,
+            "n_prior_failures": len(prior_failures or []),
+        })
+        modified = (
+            f"FAKE LLM-rewritten query (iter={iteration}, strategy={strategy}). "
+            f"Original was: {query_text}. Required reply: {target_string}"
+        )
+        payload_id = f"qinject_llm_fake_iter{iteration}"
+        payload = QueryInjectionPayload(
+            payload_id=payload_id,
+            original_query=query_text,
+            modified_query=modified,
+            target_string=target_string,
+            strategy=strategy,
             query_text=query_text,
         )
         return payload, GenerationTrace(latency_ms=0.0, prompt_template_hash="sha256:fake")
@@ -284,7 +325,12 @@ def test_graph_iteration_one_uses_llm_path() -> None:
 
     assert final["payload_source"] == "llm"
     # Fake LLM gen was called exactly once (one iteration of the LLM path).
-    total_calls = len(fake_gen.ipi_calls) + len(fake_gen.poison_calls)
+    # Sum across all three families (Day 7.5 added query_injection_calls).
+    total_calls = (
+        len(fake_gen.ipi_calls)
+        + len(fake_gen.poison_calls)
+        + len(fake_gen.query_injection_calls)
+    )
     assert total_calls == 1, f"expected 1 LLM call, got {total_calls}"
     # And rollback still holds.
     assert retriever.get_state_hash() == pre_hash
@@ -339,3 +385,81 @@ def test_graph_populates_metric_fields() -> None:
     assert final["ragas_answer_relevance"] is None
     assert final["ragas_context_relevance"] is None
     assert final["ragas_notes"] and "disabled" in final["ragas_notes"]
+
+
+# ---------------------------------------------------------------------------
+# Day 7.5 — query-channel orchestration
+# ---------------------------------------------------------------------------
+
+
+def test_graph_query_channel_skips_corpus_writes() -> None:
+    """Query-injection routes through the query channel without touching the index.
+
+    Pins the Day-7.5 contract that the executor's query-channel branch:
+      1. does NOT call `add_documents` / `remove_documents` (so Chroma's
+         `state_hash` is identical pre- and post-execution);
+      2. feeds the modified query into the pipeline, not the original;
+      3. populates `attack_channel == "query"` and a non-empty
+         `modified_query` in the final state;
+      4. yields `asr_retrieval == True` trivially in the evaluator (the
+         malicious instruction is delivered through the prompt, not via
+         retrieval gating).
+    """
+    load_env()
+
+    retriever = Retriever(persist_dir=CHROMA_DIR, embedding_model_name=EMBEDDING_MODEL)
+    if retriever._count() == 0:
+        pytest.skip("Chroma empty — run `python scripts/01_build_corpus.py` first.")
+    queries_path = DATA_DIR / "queries.json"
+    if not queries_path.exists():
+        pytest.skip("queries.json missing.")
+    demo_query = json.loads(queries_path.read_text(encoding="utf-8"))[0]
+
+    pre_count = retriever._count()
+    pre_hash = retriever.get_state_hash()
+
+    # Force the planner to pick `query_injection` by giving it the only
+    # success record. Greedy (ε=0) → planner always picks this family.
+    forced_planner = Planner(epsilon=0.0, seed=42)
+    forced_planner.update("seed", "query_injection", asr_t=True)
+
+    pipeline = RAGPipeline(retriever=retriever, generator=LLMGenerator())
+    app = build_graph(
+        pipeline,
+        planner=forced_planner,
+        exploit_gen=_RaisingExploitGen(),  # iter 0 → template path; never call LLM
+        run_ragas=False,
+    )
+
+    final = app.invoke({
+        "run_id": "test_day7_5_query_channel",
+        "seed": 42,
+        "query": demo_query["query_text"],
+        "query_id": demo_query["query_id"],
+        "iteration": 0,
+        "max_iterations": 1,
+        "history": [],
+    })
+
+    # Channel-level invariants.
+    assert final["attack_family"] == "query_injection"
+    assert final["attack_channel"] == "query"
+    assert final["modified_query"], "modified_query must be populated for query channel"
+    assert demo_query["query_text"] in final["modified_query"], (
+        "modified_query lost the original user question — retrieval would drift"
+    )
+    assert DEFAULT_TARGET_STRING in final["modified_query"], (
+        "modified_query missing the target string"
+    )
+
+    # Index untouched — query-channel does not write to Chroma.
+    assert retriever._count() == pre_count
+    assert retriever.get_state_hash() == pre_hash, (
+        "query-channel attack mutated the index — should be no-op"
+    )
+    # No retrieved chunk should be flagged poisoned.
+    assert all(not d["is_poisoned"] for d in final["retrieved_docs"])
+
+    # ASR-r is trivially True for the query channel.
+    assert final["asr_retrieval"] is True
+    # ASR-a may or may not fire — model behaviour is not the unit invariant.

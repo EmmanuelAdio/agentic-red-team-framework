@@ -33,10 +33,11 @@ from redteam.attacks.prompt_injection import (
     DEFAULT_TARGET_STRING,
     generate_ipi_payload,
 )
+from redteam.attacks.query_injection import generate_query_injection_payload
 from redteam.metrics.asr import compute_asr
 from redteam.metrics.rank_shift import compute_rank_shift
 from redteam.metrics.ragas_wrapper import compute_ragas_scores
-from redteam.orchestration.state import AttackFamily, RedTeamState
+from redteam.orchestration.state import AttackChannel, AttackFamily, RedTeamState
 from redteam.target.pipeline import RAGPipeline
 
 
@@ -46,6 +47,19 @@ from redteam.target.pipeline import RAGPipeline
 _DEFAULT_STRATEGY: dict[AttackFamily, str] = {
     "prompt_injection": "instruction_override",
     "corpus_poisoning": "answer_replacement",
+    "query_injection": "prefix_injection",
+}
+
+# Which delivery channel each family uses. The executor reads this to decide
+# whether to call `Retriever.add_documents` (corpus channel) or to swap in a
+# rewritten query string (query channel). Mapping kept here rather than on
+# the family enum so the orchestration is the single source of truth for
+# the channel split — adding a new family in future means adding one line
+# here, one line in `_DEFAULT_STRATEGY`, and one branch in the generator.
+_FAMILY_CHANNEL: dict[AttackFamily, AttackChannel] = {
+    "prompt_injection": "corpus",
+    "corpus_poisoning": "corpus",
+    "query_injection": "query",
 }
 
 # Day-5 sentinel false answer for the corpus-poisoning *template* branch.
@@ -113,36 +127,75 @@ def make_plan_node(planner: PlannerLike):
 
 
 def make_generate_node(exploit_gen: LLMExploitGenerator):
-    """Closure over the LLM exploit generator. Dispatches on `payload_source`."""
+    """Closure over the LLM exploit generator. Dispatches on `payload_source`.
+
+    Day 7.5 changes: dispatches *also* on the family's delivery channel.
+    For corpus-channel attacks (IPI, poisoning) the return shape is
+    unchanged from Day 6 — `payload` carries a document body, `payload_doc_id`
+    is the Chroma id the executor will add/remove. For the query channel
+    (query_injection) `payload` carries the rewritten query, `payload_doc_id`
+    is a synthetic id used only for bundle audit, and the new
+    `modified_query` field carries the same string so the executor can use
+    it directly without parsing.
+    """
 
     def generate_node(state: RedTeamState) -> dict[str, Any]:
-        family = state["attack_family"]
+        family: AttackFamily = state["attack_family"]
         strategy = state["attack_strategy"]
         query = state["query"]
         seed = state.get("seed", 42)
         source = state.get("payload_source", "template")
         iteration = state.get("iteration", 0)
         history = list(state.get("history", []))
+        channel = _FAMILY_CHANNEL[family]
 
         if source == "template":
-            payload, marker = _generate_via_template(query, family, strategy, seed)
-            payload_template_hash = None  # template hashes are baked into attack modules
+            payload, marker, payload_template_hash = _generate_via_template(
+                query, family, strategy, seed
+            )
         else:
             payload, marker, payload_template_hash = _generate_via_llm(
                 exploit_gen, query, family, strategy, iteration, history
             )
 
+        # The two channels have structurally different payload objects:
+        # corpus payloads carry a `Document`; query payloads carry a
+        # `modified_query` string. Branch the state-shape accordingly.
+        if channel == "corpus":
+            return {
+                "payload": payload.document.page_content,
+                "payload_doc_id": payload.doc_id,
+                "attack_channel": "corpus",
+                "modified_query": "",
+                "payload_metadata": {
+                    "doc_id": payload.doc_id,
+                    "family": family,
+                    "strategy": strategy,
+                    "marker": marker,
+                    "source": source,
+                    "channel": "corpus",
+                    "exploit_prompt_template_hash": payload_template_hash,
+                    "document_metadata": dict(payload.document.metadata),
+                },
+            }
+        # channel == "query"
         return {
-            "payload": payload.document.page_content,
-            "payload_doc_id": payload.doc_id,
+            "payload": payload.modified_query,
+            "payload_doc_id": payload.payload_id,
+            "attack_channel": "query",
+            "modified_query": payload.modified_query,
             "payload_metadata": {
-                "doc_id": payload.doc_id,
+                "doc_id": payload.payload_id,
                 "family": family,
                 "strategy": strategy,
                 "marker": marker,
                 "source": source,
+                "channel": "query",
                 "exploit_prompt_template_hash": payload_template_hash,
-                "document_metadata": dict(payload.document.metadata),
+                # No `document_metadata` — query-channel payloads have no
+                # corpus footprint. Executor checks `attack_channel` and
+                # skips the add/remove path entirely.
+                "document_metadata": None,
             },
         }
 
@@ -154,8 +207,14 @@ def _generate_via_template(
     family: AttackFamily,
     strategy: str,
     seed: int,
-) -> tuple[Any, str]:
-    """Hand-templated path (Day-3/Day-4 helpers)."""
+) -> tuple[Any, str, Optional[str]]:
+    """Hand-templated path (Day-3/Day-4/Day-7.5 helpers).
+
+    Returns ``(payload, marker, prompt_template_hash)``. The hand-templated
+    path has no LLM prompt template, so ``prompt_template_hash`` is
+    ``None`` — the bundle reader infers the template from the attack
+    family + strategy by reading the source.
+    """
     if family == "prompt_injection":
         payload = generate_ipi_payload(
             query_text=query,
@@ -163,7 +222,7 @@ def _generate_via_template(
             strategy=strategy,  # type: ignore[arg-type]
             seed=seed,
         )
-        return payload, payload.target_string
+        return payload, payload.target_string, None
     if family == "corpus_poisoning":
         payload = generate_poison_payload(
             query_text=query,
@@ -171,7 +230,15 @@ def _generate_via_template(
             strategy=strategy,  # type: ignore[arg-type]
             seed=seed,
         )
-        return payload, payload.target_answer
+        return payload, payload.target_answer, None
+    if family == "query_injection":
+        payload = generate_query_injection_payload(
+            query_text=query,
+            target_string=DEFAULT_TARGET_STRING,
+            strategy=strategy,  # type: ignore[arg-type]
+            seed=seed,
+        )
+        return payload, payload.target_string, None
     raise ValueError(f"Unknown attack_family {family!r}")
 
 
@@ -199,6 +266,14 @@ def _generate_via_llm(
             prior_failures=history,
         )
         return payload, payload.target_answer, trace.prompt_template_hash
+    if family == "query_injection":
+        payload, trace = exploit_gen.generate_query_injection(
+            query_text=query,
+            strategy=strategy,
+            iteration=iteration,
+            prior_failures=history,
+        )
+        return payload, payload.target_string, trace.prompt_template_hash
     raise ValueError(f"Unknown attack_family {family!r}")
 
 
@@ -214,40 +289,57 @@ def make_execute_node(pipeline: RAGPipeline):
     baseline_cache: dict[str, dict[str, Any]] = {}
 
     def execute_node(state: RedTeamState) -> dict[str, Any]:
-        # Re-build the LangChain Document from the payload state. We could
-        # carry the original Document through state, but TypedDicts with
-        # rich Python objects inside complicate serialization later. The
-        # generator already produced a deterministic doc_id, so reconstructing
-        # a Document with the same id + metadata is round-trip safe.
         from langchain_core.documents import Document
 
-        meta = state["payload_metadata"]
-        doc = Document(
-            page_content=state["payload"],
-            metadata=meta["document_metadata"],
-        )
         payload_doc_id = state["payload_doc_id"]
         query = state["query"]
+        # Default to corpus channel when the field is absent — preserves
+        # behaviour for any caller that initialised state pre-Day-7.5.
+        channel = state.get("attack_channel", "corpus")
 
-        # ---- baseline pass (cached) --------------------------------------
-        # Run only if we haven't seen this query yet. The pipeline.run is
-        # cheap on cached prompts (SQLiteCache fires).
+        # ---- baseline pass (cached, runs the ORIGINAL query in both channels)
+        # The baseline is the user's clean query — we want rank_shift_at_k
+        # to compare attacked retrieval against the clean retrieval, not
+        # against a different attacked retrieval. For query-channel attacks
+        # this still uses the unmodified `query`, which is the right
+        # counterfactual ("what would the user have got without injection?").
         if query not in baseline_cache:
             baseline_cache[query] = pipeline.run(query)
         baseline = baseline_cache[query]
 
-        # ---- attacked pass -----------------------------------------------
-        pipeline.retriever.add_documents([doc])
-        try:
-            run_record = pipeline.run(query)
-        finally:
-            pipeline.retriever.remove_documents([payload_doc_id])
+        if channel == "corpus":
+            # Reconstruct the Document from state (TypedDict-friendly: avoids
+            # carrying rich Python objects through state). Generator already
+            # produced a deterministic doc_id, so this round-trip is exact.
+            meta = state["payload_metadata"]
+            doc = Document(
+                page_content=state["payload"],
+                metadata=meta["document_metadata"],
+            )
+            pipeline.retriever.add_documents([doc])
+            try:
+                run_record = pipeline.run(query)
+            finally:
+                pipeline.retriever.remove_documents([payload_doc_id])
+            # Flag any retrieved chunk whose doc_id matches the payload's.
+            retrieved = [
+                {**d, "is_poisoned": d["doc_id"] == payload_doc_id}
+                for d in run_record["retrieved_docs"]
+            ]
+        else:
+            # Query channel: feed the modified query to the pipeline. Nothing
+            # is added to or removed from the retriever, so the
+            # `index_state_hash` returned to state matches the baseline's
+            # automatically (same Chroma collection, same content).
+            modified_query = state.get("modified_query") or state["payload"]
+            run_record = pipeline.run(modified_query)
+            # No poisoned doc to flag — the input channel doesn't add to
+            # the corpus, so every retrieved chunk is legitimate. We still
+            # surface the rank-1 doc_id etc. for the bundle audit.
+            retrieved = [
+                {**d, "is_poisoned": False} for d in run_record["retrieved_docs"]
+            ]
 
-        # Flag any retrieved chunk whose doc_id matches the payload's.
-        retrieved = [
-            {**d, "is_poisoned": d["doc_id"] == payload_doc_id}
-            for d in run_record["retrieved_docs"]
-        ]
         return {
             "retrieved_docs": retrieved,
             "generator_output": run_record["generator_output"],
@@ -273,14 +365,28 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
         marker = state["payload_metadata"]["marker"]
         retrieved = state.get("retrieved_docs", [])
         output = state.get("generator_output", "") or ""
+        channel = state.get("attack_channel", "corpus")
 
         # ---- ASR triple ---------------------------------------------------
-        asr = compute_asr(
-            retrieved_docs=retrieved,
-            payload_doc_id=payload_doc_id,
-            generator_output=output,
-            marker=marker,
-        )
+        # ASR-r semantics depend on the channel:
+        #   * corpus channel — was the payload doc in retrieved top-k?
+        #   * query channel  — trivially True (the malicious instruction is
+        #     embedded in the prompt itself; retrieval has no gating role).
+        # Keeping the field name uniform across channels means Day 9's
+        # experiment matrix can aggregate ASR-r across all three families
+        # without per-family branching at analysis time.
+        if channel == "query":
+            from redteam.metrics.asr import ASRTriple, compute_asr_answer
+
+            asr_a = compute_asr_answer(output, marker)
+            asr = ASRTriple(retrieval=True, answer=asr_a, target=asr_a)
+        else:
+            asr = compute_asr(
+                retrieved_docs=retrieved,
+                payload_doc_id=payload_doc_id,
+                generator_output=output,
+                marker=marker,
+            )
 
         if asr.target:
             verdict = "success"
