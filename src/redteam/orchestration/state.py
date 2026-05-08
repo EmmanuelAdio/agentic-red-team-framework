@@ -102,6 +102,11 @@ class RedTeamState(TypedDict, total=False):
     asr_retrieval: bool
     asr_answer: bool
     asr_target: bool  # Day 7: was implicit (asr_r and asr_a); now stored.
+    # Day 8 wire-up of the Day-7.5 availability metric. ASR-deny fires when
+    # the generator refused / declined to answer (jamming attacks, blocker
+    # documents). Stored alongside the integrity ASR triple so each
+    # exploit bundle records integrity-vs-availability outcomes uniformly.
+    asr_deny: bool
     rank_shift_at_k: int  # Day 7: computed by `redteam.metrics.rank_shift`.
     # Day 7: RAGAS notes — captures NaN/exception reasons for traceability.
     ragas_notes: Optional[str]

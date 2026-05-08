@@ -34,7 +34,7 @@ from redteam.attacks.prompt_injection import (
     generate_ipi_payload,
 )
 from redteam.attacks.query_injection import generate_query_injection_payload
-from redteam.metrics.asr import compute_asr
+from redteam.metrics.asr import compute_asr, compute_asr_deny
 from redteam.metrics.rank_shift import compute_rank_shift
 from redteam.metrics.ragas_wrapper import compute_ragas_scores
 from redteam.orchestration.state import AttackChannel, AttackFamily, RedTeamState
@@ -388,6 +388,14 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
                 marker=marker,
             )
 
+        # ASR-deny — availability metric (Day 7.5 lexicon, wired Day 8).
+        # Fires when the LLM refused / declined to answer; orthogonal to
+        # the integrity triple so a jamming attack registers a positive
+        # `asr_deny` even when ASR-t is False. Computed for every run
+        # (corpus and query channel alike) so the bundle's evaluation
+        # block is uniform across the experiment matrix.
+        asr_deny = compute_asr_deny(output)
+
         if asr.target:
             verdict = "success"
         elif asr.retrieval:
@@ -434,6 +442,7 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
             "asr_retrieval": asr.retrieval,
             "asr_answer": asr.answer,
             "asr_target": asr.target,
+            "asr_deny": asr_deny,
             "rank_shift_at_k": rank_shift_at_k,
             "verdict": verdict,
             # Truncated output snapshot — useful for the LLM exploit-gen
@@ -451,6 +460,7 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
             "asr_retrieval": asr.retrieval,
             "asr_answer": asr.answer,
             "asr_target": asr.target,
+            "asr_deny": asr_deny,
             "rank_shift_at_k": rank_shift_at_k,
             "verdict": verdict,
             "history": history,

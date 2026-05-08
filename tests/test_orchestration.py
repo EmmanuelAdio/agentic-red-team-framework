@@ -375,6 +375,8 @@ def test_graph_populates_metric_fields() -> None:
     # ASR triple now includes asr_target as an explicit field.
     assert isinstance(final["asr_target"], bool)
     assert final["asr_target"] == (final["asr_retrieval"] and final["asr_answer"])
+    # Day 8 wire-up: `asr_deny` is now populated for every run.
+    assert isinstance(final["asr_deny"], bool)
     # rank_shift_at_k is now a real int (was a 0 placeholder pre-Day-7).
     assert isinstance(final["rank_shift_at_k"], int)
     # Baseline pass populated.

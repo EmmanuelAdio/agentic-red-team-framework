@@ -385,11 +385,195 @@ adaptation signal.
 
 ---
 
-## 5. Exploit-bundle structure (placeholder — Day 8)
+## 5. Exploit-bundle structure & on-disk layout
 
-Visual of the JSON schema from spec §7 (`target_system`, `attack`,
-`execution`, `evaluation`, `reproducibility` blocks). Diagram added on
-Day 8.
+### 5.1 What this section is
+
+Describes how every red-team run lands on disk: the per-bundle JSON
+shape (spec §7 with three additive blocks), the batch-folder layout
+under `data/runs/`, and the design rationale for both. This is the
+operational definition of Contribution **C4** (reproducible exploit
+bundles); the bundle layer is the seam between the live LangGraph
+state and any downstream analysis or archival.
+
+### 5.2 On-disk layout
+
+Every invocation of the experiment driver (or the dry-run script,
+`scripts/05_run_dryrun.py`) creates **one batch folder** and writes
+every bundle from that invocation into it, plus a single batch-level
+summary alongside.
+
+```
+data/runs/
+├── batch_<batch_id>/                                   # one folder per invocation
+│   ├── run_<query_id>_<batch_id>_bundle.json           # one per query
+│   ├── run_<query_id>_<batch_id>_bundle.json
+│   ├── ...
+│   └── batch_<batch_id>_summary.json                   # rollup for this batch
+├── batch_<batch_id>/
+│   └── ...
+```
+
+`batch_<batch_id>` is a UTC timestamp (e.g. `batch_20260508T152200Z`).
+The same `batch_id` is the trailing token in every bundle filename
+inside, so a file is self-identifying — copying one out of its folder
+is unambiguous about which batch produced it.
+
+**Why batch-folder grouping (and not flat, and not per-run-folder):**
+
+- *Flat* (`data/runs/<run_id>.json` for every run) makes Day 9's ~450
+  bundles unmanageable in a single directory; a single `ls` becomes
+  noise, and there is no natural place for batch-level metadata
+  (rollback hashes, planner snapshot, wall time) to live without
+  polluting the top level.
+- *Per-run folders* (`data/runs/<run_id>/bundle.json`) over-fragments:
+  there is rarely any per-run artefact other than the bundle itself,
+  so each folder ends up containing one file plus directory overhead.
+  More importantly the unit users actually reason about is "the batch
+  I ran with seed 42" — so the directory split should match that unit.
+- *Batch folders* group runs by the invocation that produced them.
+  Every artefact for one batch — bundles plus summary — is co-located,
+  which keeps the unit easy to share, archive, gzip, or delete.
+
+**Why `batch_<id>_summary.json` lives inside the batch folder:** the
+summary is a derived rollup of *its* bundles (verdict counts, ASR
+totals, family distribution, planner snapshot, pre/post
+`index_state_hash`). Putting it next to the bundles it describes keeps
+a batch self-contained — no cross-folder lookups when you tar one up.
+
+### 5.3 Bundle JSON shape (spec §7 with Day 6 / 7.5 / 8 extensions)
+
+Each bundle is a single Pydantic-validated JSON document. The top-level
+key order is fixed so the most-scanned blocks are at the top of the
+file:
+
+```
+bundle_version          # "1.0"  — the lever for any future breaking change
+summary                 # headline metrics (Day 8 addition; see §5.4)
+run_id                  # globally unique within the project
+timestamp_utc           # ISO-8601 with `Z` suffix
+seed                    # planner + RNG seed for this run
+framework_version       # the project's own version string
+
+target_system           # what the RAG pipeline was running
+  ├── embedding_model
+  ├── vector_store
+  ├── retriever_top_k
+  ├── llm_model
+  ├── llm_temperature
+  └── prompt_template_hash       # SHA-256 of the verbatim prompt template
+
+attack                  # what the planner + exploit-generator produced
+  ├── family            # prompt_injection | corpus_poisoning | query_injection
+  ├── strategy          # e.g. instruction_override, answer_replacement
+  ├── payload           # the adversarial doc body or modified query
+  ├── payload_id
+  ├── injection_stage   # indexing | query        (mapped from attack_channel)
+  ├── iteration
+  ├── payload_source    # template | llm          (Day 6 — provenance flag)
+  ├── attack_channel    # corpus | query          (Day 7.5 — channel split)
+  ├── modified_query    # populated only for query-channel attacks
+  └── exploit_prompt_template_hash  # SHA-256 of the LLM exploit-gen prompt
+                                    # (`null` for the template path)
+
+execution               # what actually happened on this run
+  ├── query
+  ├── query_id
+  ├── index_state_hash  # SHA-256 of the index doc_id set at run time
+  ├── retrieved_docs    # [{doc_id, rank, score, is_poisoned}] — content stripped
+  ├── generator_output
+  ├── generator_latency_ms
+  └── baseline_top1_doc_id    # rank-1 from the *clean* baseline pass (for rs@k)
+
+evaluation              # the reference-free metric vector (spec §6)
+  ├── ragas_faithfulness         # ∈ [0, 1] | null
+  ├── ragas_answer_relevance     # ∈ [0, 1] | null
+  ├── ragas_context_relevance    # ∈ [0, 1] | null
+  ├── asr_retrieval              # bool
+  ├── asr_answer                 # bool
+  ├── asr_target                 # bool   (asr_retrieval ∧ asr_answer)
+  ├── asr_deny                   # bool   (Day 7.5; wired Day 8 — see §5.5)
+  ├── rank_shift_at_k            # int    (sentinel = k if baseline doc fell out)
+  ├── verdict                    # success | partial | failure
+  ├── evaluator_notes            # RAGAS NaN / failure reasons
+  └── iteration_history          # one entry per past iteration of the loop
+
+reproducibility         # environment metadata for replay
+  ├── git_commit                 # short SHA, or null if not in a repo
+  ├── python_version
+  └── key_dependencies           # name -> version for the pinned subset
+```
+
+### 5.4 Why a `summary` block at the top of every bundle
+
+The Day-8 schema adds a `summary` block immediately after
+`bundle_version`. Its fields duplicate values that also appear in
+`attack` / `execution` / `evaluation` (verdict, ASR triple + ASR-deny,
+rank-shift, family / strategy / channel, query_id, generator latency,
+RAGAS triple). The duplication is deliberate:
+
+1. **At-a-glance scanning.** A reader opening any bundle file sees the
+   verdict and the metric vector before any of the verbose blocks.
+   With ~50–500 bundles per batch, this is the difference between
+   instant triage and parsing every file to grep one field.
+2. **Diff-friendliness.** Outcome changes between two runs (success →
+   failure, ASR-t flip, RAGAS drop) surface at the top of the diff
+   rather than hiding deep inside the `evaluation` block.
+3. **Cannot drift.** The summary is constructed *once* in
+   `build_bundle` from the same fields the detail blocks read. There
+   is no second authorship path, so the summary cannot fall out of
+   sync with the canonical view. A schema-test
+   (`test_builder_writes_top_level_summary_consistent_with_blocks`)
+   pins this contract so future refactors cannot break it silently.
+
+The trade-off is a few hundred extra bytes per bundle (typical bundles
+are ~3–5 KiB; the summary adds ~250 bytes). Cheap relative to the
+analysis-time saving.
+
+### 5.5 ASR-deny — wired into `evaluate_node` from Day 8
+
+`compute_asr_deny` was introduced on Day 7.5 alongside the jamming
+attack family (in `redteam.metrics.asr`) but was only invoked from the
+notebook. The Day-8 wire-up calls it from `evaluate_node` for every
+run — corpus and query channel alike — so each bundle's
+`evaluation.asr_deny` is always populated as a bool.
+
+**Why it ships now rather than being deferred to Day 9:** the dry-run
+script writes 50 bundles and is the first time the bundle JSON is
+exercised under realistic conditions. Leaving `asr_deny` at `null` for
+those 50 bundles would pollute the historical record — Day-9's
+analysis would then have to special-case "pre-Day-8 bundles" when
+aggregating availability outcomes. Wiring it into the evaluator on
+Day 8 means *every* recorded run carries the field uniformly.
+
+The integrity ASR triple and ASR-deny are *orthogonal*: the integrity
+triple measures attacks that hijack the answer; ASR-deny measures
+attacks that block the answer. A jamming attack can register
+`asr_deny=True` with `asr_target=False`, which is the exact case
+Day 7.5's blocker-document family was added to study. The schema
+keeps `asr_deny: Optional[bool]` so any pre-Day-8-wire-up bundles
+still parse, but the builder always emits a bool for fresh runs.
+
+### 5.6 Reproducibility primitives recorded per bundle
+
+Three SHA-256 hashes plus a git commit pin replay-fidelity:
+
+- `target_system.prompt_template_hash` — protects against silent
+  edits to the RAG generator's prompt template.
+- `attack.exploit_prompt_template_hash` — protects against silent
+  edits to the LLM exploit-generator's prompt template (when the
+  payload took the LLM path; `null` for the template path).
+- `execution.index_state_hash` — pins the retriever's doc_id set at
+  run time. Lets a reviewer assert the index was in the expected
+  state when the attack ran.
+- `reproducibility.git_commit` — short SHA of the project at run
+  time; pairs with `key_dependencies` to recover the exact code
+  version.
+
+Together these mean: given a bundle, a third party can recompute the
+target_system, replay the same payload against the same index state,
+and check the generator's response against the recorded one — without
+relying on any out-of-band metadata.
 
 ---
 
