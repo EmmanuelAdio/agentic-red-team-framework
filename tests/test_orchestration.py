@@ -37,7 +37,7 @@ from redteam.attacks.prompt_injection import (
 )
 from redteam.attacks.query_injection import QueryInjectionPayload
 from redteam.config import CHROMA_DIR, DATA_DIR, EMBEDDING_MODEL, load_env
-from redteam.orchestration.graph import build_graph, plan_node
+from redteam.orchestration.graph import ForcedCellPlanner, build_graph, plan_node
 from redteam.orchestration.state import RedTeamState
 from redteam.target.generator import LLMGenerator
 from redteam.target.pipeline import RAGPipeline
@@ -465,3 +465,71 @@ def test_graph_query_channel_skips_corpus_writes() -> None:
     # ASR-r is trivially True for the query channel.
     assert final["asr_retrieval"] is True
     # ASR-a may or may not fire — model behaviour is not the unit invariant.
+
+
+# ---------------------------------------------------------------------------
+# Day 9 — forced-cell planner (drives the 600-run experiment matrix)
+# ---------------------------------------------------------------------------
+
+
+def test_forced_cell_planner_drives_graph() -> None:
+    """A ``ForcedCellPlanner(family, strategy)`` pins both axes of the cell.
+
+    The Day-9 experiment matrix is a forced Cartesian over (seed × query ×
+    cell) where one of the cells is *corpus_poisoning + jamming* — an
+    availability attack scored by ASR-deny. Pinning only the family would
+    route this cell through ``_DEFAULT_STRATEGY[corpus_poisoning] ==
+    "answer_replacement"`` and silently collapse it into the integrity cell.
+    This test pins the contract: when the planner carries a ``strategy``
+    attribute, ``plan_node`` honours it; the resulting payload metadata
+    records the forced strategy verbatim.
+    """
+    load_env()
+
+    retriever = Retriever(persist_dir=CHROMA_DIR, embedding_model_name=EMBEDDING_MODEL)
+    if retriever._count() == 0:
+        pytest.skip("Chroma empty — run `python scripts/01_build_corpus.py` first.")
+    queries_path = DATA_DIR / "queries.json"
+    if not queries_path.exists():
+        pytest.skip("queries.json missing.")
+    demo_query = json.loads(queries_path.read_text(encoding="utf-8"))[0]
+
+    pre_count = retriever._count()
+    pre_hash = retriever.get_state_hash()
+
+    pipeline = RAGPipeline(retriever=retriever, generator=LLMGenerator())
+    forced = ForcedCellPlanner(family="corpus_poisoning", strategy="jamming")
+    app = build_graph(
+        pipeline,
+        planner=forced,
+        exploit_gen=_RaisingExploitGen(),  # iter 0 → template path
+        run_ragas=False,
+    )
+
+    final = app.invoke({
+        "run_id": "test_day9_forced_cell_jamming",
+        "seed": 42,
+        "query": demo_query["query_text"],
+        "query_id": demo_query["query_id"],
+        "iteration": 0,
+        "max_iterations": 1,
+        "history": [],
+    })
+
+    # The forced cell pins both axes.
+    assert final["attack_family"] == "corpus_poisoning"
+    assert final["attack_strategy"] == "jamming"
+    # And the payload metadata round-trips the strategy so the bundle reader
+    # can distinguish jamming bundles from answer_replacement bundles
+    # without re-deriving from the body text.
+    assert final["payload_metadata"]["strategy"] == "jamming"
+    # ASR-deny is wired into evaluate_node as of Day 8 and is the success
+    # metric for the jamming cell — it must be a bool here regardless of
+    # whether the LLM actually refused.
+    assert isinstance(final["asr_deny"], bool)
+
+    # Index rollback still holds — corpus channel adds + removes the payload.
+    assert retriever._count() == pre_count
+    assert retriever.get_state_hash() == pre_hash, (
+        "forced jamming cell leaked state — Day-9 batch would be contaminated"
+    )

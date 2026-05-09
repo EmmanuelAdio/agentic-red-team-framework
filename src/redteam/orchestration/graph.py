@@ -101,6 +101,41 @@ class _RoundRobinPlanner:
         del query_text, family, asr_t
 
 
+@dataclass
+class ForcedCellPlanner:
+    """Always returns a fixed (family, strategy) pair; ``update()`` is a no-op.
+
+    Used by ``scripts/06_run_experiments.py`` (the Day-9 experiment driver) to
+    force the (seed × query × cell) Cartesian product the dissertation's
+    headline matrix needs. The ε-greedy :class:`Planner` is preserved
+    elsewhere as a *sidecar log* — its ``select()`` sequence is recorded
+    per-seed for the RQ2 (planner-adaptivity) discussion, but it does not
+    drive the headline runs.
+
+    Carrying the strategy as well as the family is the reason this class
+    exists rather than a thinner ``ForcedFamilyPlanner``: cell 3 of the
+    Day-9 matrix is *corpus_poisoning + jamming*, which is structurally
+    distinct from cell 2 (*corpus_poisoning + answer_replacement*). Pinning
+    only the family would route both cells through ``_DEFAULT_STRATEGY`` and
+    collapse them into one. The strategy attribute is duck-typed —
+    :func:`make_plan_node` reads it via ``getattr(planner, "strategy",
+    None)`` and falls through to ``_DEFAULT_STRATEGY`` for planners that
+    don't carry one (the ε-greedy ``Planner`` and ``_RoundRobinPlanner``
+    both behave exactly as before).
+    """
+
+    family: AttackFamily
+    strategy: str
+
+    def select(self, query_text: str) -> AttackFamily:
+        del query_text
+        return self.family
+
+    def update(self, query_text: str, family: AttackFamily, asr_t: bool) -> None:
+        # No memory — the cell is fixed by construction.
+        del query_text, family, asr_t
+
+
 # ---------------------------------------------------------------------------
 # Nodes
 # ---------------------------------------------------------------------------
@@ -117,9 +152,16 @@ def make_plan_node(planner: PlannerLike):
     def plan_node(state: RedTeamState) -> dict[str, Any]:
         iteration = state.get("iteration", 0)
         family = planner.select(state["query"])
+        # Day 9: a planner may optionally carry a `strategy` attribute to
+        # pin both axes of the (family, strategy) cell — see
+        # `ForcedCellPlanner`. Duck-typed to keep the `PlannerLike`
+        # protocol unchanged: planners without a `strategy` attribute fall
+        # through to the per-family default exactly as before.
+        forced_strategy = getattr(planner, "strategy", None)
+        strategy = forced_strategy if forced_strategy else _DEFAULT_STRATEGY[family]
         return {
             "attack_family": family,
-            "attack_strategy": _DEFAULT_STRATEGY[family],
+            "attack_strategy": strategy,
             "payload_source": "template" if iteration == 0 else "llm",
         }
 

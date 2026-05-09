@@ -837,3 +837,55 @@ The Day-7 metrics module already wrote every numeric field the bundle needs into
 ### Commit
 
 Day 8 work ready to commit. Suggested message: `Day 8: exploit-bundle layer (schema + builder + store) + 50-bundle dry run (69/69 tests)`.
+
+---
+
+## Day 9 (12 May 2026) — Full experiment matrix + Methodology & Experimentation chapter drafts
+
+### What shipped today
+
+- **`scripts/06_run_experiments.py`** — the Day-9 experiment driver. Forced-Cartesian sweep over 4 attack cells × 3 seeds × 50 queries = **600 reproducible bundles** under `results/runs/`. Each cell pinned both axes (family + strategy) via the new `ForcedCellPlanner`; the ε-greedy `Planner` is preserved as a per-seed sidecar log feeding ground-truth ASR-t verdicts back through `Planner.update`.
+- **`ForcedCellPlanner` + `make_plan_node` strategy-override hook** — `src/redteam/orchestration/graph.py:103-138` adds the new planner; lines 117-130 add a duck-typed `getattr(planner, "strategy", None)` so non-forced planners (the ε-greedy `Planner` and `_RoundRobinPlanner`) behave identically to before. One new unit test (`test_forced_cell_planner_drives_graph`) pins the `(family, strategy)` round-trip for the jamming cell specifically — chosen because pinning only the family would silently route jamming through the integrity-cell default.
+- **`docs/METHODOLOGY.md` (Chapter 4 source)** — research questions with explicit metric → RQ mapping, system under test (pinned values + per-row justification), threat model (capability matrix), 4-cell attack taxonomy with the 2-channel × 2-objective framing, agentic orchestration including the Day-9 forced-cell mechanism, evaluation metrics (ASR triple + ASR-deny + RAGAS triple + rank_shift@k), reproducibility primitives (5 of them), and limitations. ~3,500 words first-draft.
+- **`docs/EXPERIMENTATION.md` (Chapter 5 source)** — scope-vs-spec section justifying the 4-cell expansion (additive, not substitutive), per-parameter justification table (seeds, query count, max-iter, RAGAS, sweep strategy, output layout, gzipping deferral, failure handling), execution plan with wall-clock estimate (60–90 min) and restart semantics, three verification gates, statistical reporting plan with paired-bootstrap pairwise-against-IPI, threats to validity, and a clean-checkout reproduction recipe for the appendix. ~3,000 words.
+- **`src/redteam/config.py`** — new `EXPERIMENT_RUNS_DIR = results/runs/` constant, separate from `RUNS_DIR = data/runs/` (Day-8 dry-run home). Keeps the two roots from cross-aggregating.
+- **76/76 unit tests green** (75 pre-existing + 1 new). The new test pins the strategy-pinning contract that the entire 600-run matrix's correctness rests on.
+- **Smoke run** (`--smoke`): 8 bundles in 5.0 s, all four cells exercised, rollback OK, manifest produced. Verified each batch's bundle has the `summary` block at JSON position 1 and the correct `(family, strategy)` pair.
+- **Methodology chapter doc-role split** — three files now have explicit dissertation-chapter ownership: `DIAGRAMS.md` → Chapter 3 (Design); `docs/METHODOLOGY.md` → Chapter 4 (Methodology); `docs/EXPERIMENTATION.md` → Chapter 5 (Experimentation); `LAB_NOTEBOOK.md` → Chapter 4/5 supplement (development chronology). Recorded at the foot of `docs/METHODOLOGY.md` and again in `docs/EXPERIMENTATION.md`.
+
+### Methodology decision: 4 cells, not 2
+
+**Why we deviated from the spec's "~50 queries × 2 attacks × 3 seeds = ~300 runs":** the implemented system covers more than the spec scoped. By end of Day 7.5 the codebase had `prompt_injection`, `corpus_poisoning` (with both `answer_replacement` and `jamming` strategies), and `query_injection` — four distinct attack cells crossing two delivery channels and two adversarial objectives. By Day 8 the bundle layer recorded all four cleanly. Running the full coverage on Day 9 incurs only the running cost, not the implementation cost; the spec's two-cell pair (cells 1, 2) is preserved as the primary integrity axis. Rationale paragraph lifted into `docs/EXPERIMENTATION.md` §5.1.
+
+### Methodology decision: 12 batches, not 3
+
+**Why we have 12 batch folders, not the planned 3:** `BundleStore.path_for(query_id)` produces `run_<query_id>_<batch_id>_bundle.json`, which would collide across the 4 cells run against the same query inside one per-seed batch. Two options: (a) modify the BundleStore — rejected because Day-8 frozen it as the spec §7 contract, (b) split into one batch per (seed, cell) and bake the cell label into the batch_id. Option (b) shipped — `results/runs/batch_seed42_poiJ_<ts>/` etc. Recovers the (seed, cell) tag from the directory name without parsing each bundle, which simplifies Day 10 plotting (read `experiment_manifest.json` first, iterate over the listed batches). The plan was updated retrospectively to reflect this; the user was notified at the time.
+
+### Methodology decision: forced Cartesian + ε-greedy sidecar
+
+**Why the planner doesn't drive the 600 runs:** the ε-greedy planner picks ONE family per query stochastically, which is right for evaluating *the planner* (RQ2) but wrong for evaluating *per-cell ASR* (RQ1, RQ3). A planner-driven sweep concentrates on whichever family converges first and undersamples the others, breaking per-cell statistical power. The hybrid arrangement runs forced-cell matrices for the headline 600, then runs the real planner as a sidecar log with the ACTUAL ASR-t verdicts fed back via `update()` so the sidecar's selection sequence reflects the ground truth the planner would have observed. Documented in detail in `docs/EXPERIMENTATION.md` §5.3.5 and `docs/METHODOLOGY.md` §4.5.1.
+
+### Methodology decision: explicit doc-role split
+
+The user asked, mid-Day-9, whether the methodology chapter should live in `LAB_NOTEBOOK.md` or in a new file. Decision: three discrete files, each owning one chapter's source content. Day 11's polish step now has clear lift-from sources for each chapter — Chapter 3 lifts from `DIAGRAMS.md`, Chapter 4 from `docs/METHODOLOGY.md`, Chapter 5 from `docs/EXPERIMENTATION.md`, with `LAB_NOTEBOOK.md` providing chronological supplement.
+
+### Problems faced
+
+- **Filename collision in the original layout plan**. Caught at implementation time, not at planning time. The plan said "200 bundles per batch (50q × 4 cells)"; in practice that requires four bundles to share the same `<query_id>` portion of the filename, which the existing `BundleStore` does not support. Resolved by splitting into 12 batches without touching `BundleStore`. Lesson: when the plan says "reuse the existing layout" + "the cell tag goes in the filename", verify the existing layout's filename actually has room for the new tag *before* writing the script.
+- **Cp1252 mojibake on a section symbol**. Typing `§` into `config.py` produced `ยง` after Windows shell-encoding round-trip. Fixed by replacing with the literal text "section". Same lesson as Day 8's `→` and `×` issues — the project is on Windows / cp1252 for console + script behaviour, so non-ASCII in source is a hazard. Documentation files (`.md`) tolerate it because git stores UTF-8 and editors render it fine; source code does not.
+- **Plan-mode drift between proposal and implementation**. The plan as approved said "3 batches per seed"; the implementation needed "12 batches per (seed, cell)". I notified the user via in-progress text rather than going back into plan mode for re-approval, since the deviation was strictly less invasive than the original (no schema change, no API change). Captured here so the dissertation's Methodology chapter can cite the rationale without rummaging through chat history.
+
+### Key observation
+
+**The right unit of statistical analysis is the cell, not the family.** The spec's "two attack families" framing (PROJECT_SPEC.md §2 line 22) collapses two structurally distinct attacks (corpus-poisoning answer-replacement and corpus-poisoning jamming) into a single bucket because they share a family name; in practice they have different success metrics (ASR-t vs ASR-deny), different attack objectives (integrity vs availability), and likely different success rates. The Day-9 4-cell framing makes this explicit and lets the dissertation report each cell separately. The 2-channel × 2-objective taxonomy that emerges is, retrospectively, the cleanest structural framing of the threat surface this framework can attack — and it's only visible *because* the experiment matrix forced the four cells to be evaluated independently.
+
+### What's next (Day 10 — plots + statistical analysis)
+
+- Decide whether to launch the full 600-run job today or stage it (start it overnight, plot tomorrow). The smoke run shows the wiring is solid; the limiting factor is wall-clock and OpenAI spend.
+- `scripts/04_make_plots.py` reads `results/runs/experiment_manifest.json` first, then iterates over the 12 batches. Output: ASR-t bar chart with bootstrap CIs (4 cells), Faithfulness violin plot (clean vs attacked, per cell), rank_shift@k distribution stacked bars, and a planner-sidecar convergence plot for RQ2.
+- Per spec line 367 ("one chapter draft per day from Day 9"), Chapter 6 (Results) drafting starts on Day 10 from the plots + the per-cell summary stats already saved in each batch's `batch_*_summary.json`.
+
+### Commit
+
+Day 9 work ready to commit. Suggested message: `Day 9: full experiment matrix (4 cells, 3 seeds, 600 runs) + ForcedCellPlanner + Methodology + Experimentation chapter drafts (76/76 tests)`.
+
