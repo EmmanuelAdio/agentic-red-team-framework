@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "kind": "clean_baseline",
+  "batch_ts": "20260509T104405Z",
+  "n_queries_input": 2,
+  "n_queries_completed": 2,
+  "with_ragas": true,
+  "wall_seconds": 29.42,
+  "asr_retrieval_clean_total": 2,
+  "top1_is_gold_total": 2,
+  "mean_latency_ms": 17.89765000035004,
+  "mean_ragas_faithfulness": 1.0,
+  "mean_ragas_answer_relevance": 0.900726187471665,
+  "mean_ragas_context_relevance": 0.75,
+  "rows": [
+    {
+      "query_id": "test1195",
+      "query_text": "when did are you smarter than a 5th grader first air",
+      "gold_doc_ids": [
+        "doc42525"
+      ],
+      "retrieved_doc_ids": [
+        "doc42525",
+        "doc42525",
+        "doc254955",
+        "doc1979331",
+        "doc116553"
+      ],
+      "retrieved_top_scores": [
+        0.7354143287080996,
+        0.7153420396187562,
+        0.47111260073461725,
+        0.47061821820158456,
+        0.46577508169234916
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Are You Smarter than a 5th Grader? first aired on February 27, 2007.",
+      "generator_latency_ms": 29.895500000293396,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8739445932414497,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1208",
+      "query_text": "when did the tv show the waltons first air",
+      "gold_doc_ids": [
+        "doc43104"
+      ],
+      "retrieved_doc_ids": [
+        "doc43104",
+        "doc43104",
+        "doc43104",
+        "doc42525",
+        "doc254955"
+      ],
+      "retrieved_top_scores": [
+        0.7346001569619904,
+        0.7229695655280153,
+        0.7058966358395253,
+        0.4599874343079847,
+        0.4593586454750507
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The television series The Waltons first aired in September 1972.",
+      "generator_latency_ms": 5.899800000406685,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9275077817018803,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    }
+  ]
+}

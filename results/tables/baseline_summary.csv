@@ -1,0 +1,2 @@
+kind,batch_ts,n_queries,asr_retrieval_clean_rate,top1_is_gold_rate,mean_ragas_faithfulness,mean_ragas_answer_relevance,mean_ragas_context_relevance
+clean_baseline,20260509T111713Z,50,1.0,1.0,0.875,0.66560326530416,0.85

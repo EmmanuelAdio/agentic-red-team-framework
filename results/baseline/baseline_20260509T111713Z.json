@@ -1,0 +1,1479 @@
+{
+  "schema_version": "1.0",
+  "kind": "clean_baseline",
+  "batch_ts": "20260509T111713Z",
+  "n_queries_input": 50,
+  "n_queries_completed": 50,
+  "with_ragas": true,
+  "wall_seconds": 596.38,
+  "asr_retrieval_clean_total": 50,
+  "top1_is_gold_total": 50,
+  "mean_latency_ms": 6.135038000011264,
+  "mean_ragas_faithfulness": 0.875,
+  "mean_ragas_answer_relevance": 0.66560326530416,
+  "mean_ragas_context_relevance": 0.85,
+  "rows": [
+    {
+      "query_id": "test1195",
+      "query_text": "when did are you smarter than a 5th grader first air",
+      "gold_doc_ids": [
+        "doc42525"
+      ],
+      "retrieved_doc_ids": [
+        "doc42525",
+        "doc42525",
+        "doc254955",
+        "doc1979331",
+        "doc116553"
+      ],
+      "retrieved_top_scores": [
+        0.7354143287080996,
+        0.7153420396187562,
+        0.47111260073461725,
+        0.47061821820158456,
+        0.46577508169234916
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Are You Smarter than a 5th Grader? first aired on February 27, 2007.",
+      "generator_latency_ms": 23.72509999986505,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8739248651560031,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1208",
+      "query_text": "when did the tv show the waltons first air",
+      "gold_doc_ids": [
+        "doc43104"
+      ],
+      "retrieved_doc_ids": [
+        "doc43104",
+        "doc43104",
+        "doc43104",
+        "doc42525",
+        "doc254955"
+      ],
+      "retrieved_top_scores": [
+        0.7346001569619904,
+        0.7229695655280153,
+        0.7058966358395253,
+        0.4599874343079847,
+        0.4593586454750507
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The television series The Waltons first aired in September 1972.",
+      "generator_latency_ms": 5.902599999899394,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9275077817018803,
+      "ragas_context_relevance": 0.75,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1260",
+      "query_text": "how many episodes in game if thrones season 7",
+      "gold_doc_ids": [
+        "doc44513"
+      ],
+      "retrieved_doc_ids": [
+        "doc44513",
+        "doc44513",
+        "doc542453",
+        "doc444939",
+        "doc2427229"
+      ],
+      "retrieved_top_scores": [
+        0.8114151485966115,
+        0.7609691009251646,
+        0.5313985677607813,
+        0.5087149231579757,
+        0.4789289445252052
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The seventh season of Game of Thrones consists of seven episodes.",
+      "generator_latency_ms": 5.8586000004652306,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8239863396590218,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1270",
+      "query_text": "give two reasons neisseria gonorrhoeae is able to re-infect individuals after treatment",
+      "gold_doc_ids": [
+        "doc45016"
+      ],
+      "retrieved_doc_ids": [
+        "doc45016",
+        "doc45016",
+        "doc45016",
+        "doc1933673",
+        "doc2467914"
+      ],
+      "retrieved_top_scores": [
+        0.7840256819170189,
+        0.7125957720432106,
+        0.6520018379949775,
+        0.5094873905974833,
+        0.4909896445482341
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "1. Neisseria gonorrhoeae has the ability to evade the immune system by varying its surface proteins, which allows it to avoid detection and attack by the immune response.\n\n2. Infected persons do not develop immunity to future infections after an episode of gonococcal infection, making them susceptible to reinfection.",
+      "generator_latency_ms": 6.73339999957534,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.5414876572044411,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1282",
+      "query_text": "what part of maryland is close to washington dc",
+      "gold_doc_ids": [
+        "doc45333"
+      ],
+      "retrieved_doc_ids": [
+        "doc45333",
+        "doc1096082",
+        "doc1647667",
+        "doc1951153",
+        "doc423439"
+      ],
+      "retrieved_top_scores": [
+        0.6587685145234015,
+        0.49141958454989365,
+        0.48599279848247945,
+        0.45332844297750596,
+        0.45249423040492986
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The context does not specify which parts of Maryland are close to Washington, D.C. However, it mentions that the Washington metropolitan area includes parts of Maryland.",
+      "generator_latency_ms": 13.185400000111258,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1287",
+      "query_text": "who plays the lion in the movie zookeeper",
+      "gold_doc_ids": [
+        "doc45707"
+      ],
+      "retrieved_doc_ids": [
+        "doc45707",
+        "doc45707",
+        "doc103003",
+        "doc57196",
+        "doc2513988"
+      ],
+      "retrieved_top_scores": [
+        0.7586635418710731,
+        0.6866350413812888,
+        0.5345432705687247,
+        0.4418865851311625,
+        0.4206106452686207
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Joe the Lion is voiced by Sylvester Stallone in the movie Zookeeper.",
+      "generator_latency_ms": 6.1478999996325,
+      "ragas_faithfulness": 0.5,
+      "ragas_answer_relevance": 0.831982505391983,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1392",
+      "query_text": "when does the census have to be done by",
+      "gold_doc_ids": [
+        "doc49568"
+      ],
+      "retrieved_doc_ids": [
+        "doc49568",
+        "doc49568",
+        "doc134445",
+        "doc604892",
+        "doc1959508"
+      ],
+      "retrieved_top_scores": [
+        0.7282343391097537,
+        0.7007965932151918,
+        0.507715916407722,
+        0.49829942536656946,
+        0.48618068913314105
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The census must be done by April 1.",
+      "generator_latency_ms": 7.354200000008859,
+      "ragas_faithfulness": 0.0,
+      "ragas_answer_relevance": 0.8269186088440336,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1509",
+      "query_text": "what part of the brain is in the middle cranial fossa",
+      "gold_doc_ids": [
+        "doc53893"
+      ],
+      "retrieved_doc_ids": [
+        "doc53893",
+        "doc2250850",
+        "doc2455545",
+        "doc1498955",
+        "doc106179"
+      ],
+      "retrieved_top_scores": [
+        0.7778908077211975,
+        0.5866634964301456,
+        0.45328119636032527,
+        0.4273119098881558,
+        0.4231124821962273
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The temporal lobes of the brain and the pituitary gland are located in the middle cranial fossa.",
+      "generator_latency_ms": 7.538700000623066,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.42821920433998467,
+      "ragas_context_relevance": 0.75,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1560",
+      "query_text": "turkish finnish and hungarian belong to which family of languages",
+      "gold_doc_ids": [
+        "doc55779"
+      ],
+      "retrieved_doc_ids": [
+        "doc55779",
+        "doc1285254",
+        "doc55779",
+        "doc1101256",
+        "doc1285254"
+      ],
+      "retrieved_top_scores": [
+        0.6542546502681574,
+        0.5580220997623855,
+        0.49912845387677873,
+        0.4605028902652729,
+        0.4520371899796777
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Turkish, Finnish, and Hungarian belong to different language families. Finnish and Hungarian are part of the Uralic language family, while Turkish belongs to the Turkic language family.",
+      "generator_latency_ms": 6.007200000567536,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8266822033286455,
+      "ragas_context_relevance": 0.75,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1616",
+      "query_text": "actor who plays eric on boy meets world",
+      "gold_doc_ids": [
+        "doc57196"
+      ],
+      "retrieved_doc_ids": [
+        "doc57196",
+        "doc2513988",
+        "doc234951",
+        "doc13112",
+        "doc326890"
+      ],
+      "retrieved_top_scores": [
+        0.6051238160779172,
+        0.4525725813963116,
+        0.4366650963628449,
+        0.4318983299431113,
+        0.419600258869269
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "William Alan \"Will\" Friedle plays Eric Matthews on Boy Meets World.",
+      "generator_latency_ms": 5.049100000178441,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.838313325448896,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test170",
+      "query_text": "who wrote the music for christmas story live",
+      "gold_doc_ids": [
+        "doc6220",
+        "doc6235"
+      ],
+      "retrieved_doc_ids": [
+        "doc6235",
+        "doc6220",
+        "doc1249342",
+        "doc6235",
+        "doc490397"
+      ],
+      "retrieved_top_scores": [
+        0.6291969579824301,
+        0.613351723844214,
+        0.5834200435561413,
+        0.5711421608227357,
+        0.45391251400417
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The music for A Christmas Story Live! was written by Pasek & Paul.",
+      "generator_latency_ms": 8.29410000005737,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8805074008219004,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test1855",
+      "query_text": "bible verse about honor thy mother and father",
+      "gold_doc_ids": [
+        "doc65334"
+      ],
+      "retrieved_doc_ids": [
+        "doc65334",
+        "doc321016",
+        "doc982297",
+        "doc111551",
+        "doc1279738"
+      ],
+      "retrieved_top_scores": [
+        0.7807697957227038,
+        0.5916930484503446,
+        0.5843875666105574,
+        0.5452229869534457,
+        0.525313700800718
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Bible verse about honoring thy mother and father is found in Exodus 20:12, which states, \"Honor your father and your mother, that your days may be long in the land that the Lord your God is giving you.\" It is also reiterated in Deuteronomy 5:16.",
+      "generator_latency_ms": 6.62929999998596,
+      "ragas_faithfulness": 0.3333333333333333,
+      "ragas_answer_relevance": 0.7551351715257509,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2097",
+      "query_text": "are they still making games for xbox one",
+      "gold_doc_ids": [
+        "doc72882"
+      ],
+      "retrieved_doc_ids": [
+        "doc72882",
+        "doc310913",
+        "doc645982",
+        "doc814739",
+        "doc899612"
+      ],
+      "retrieved_top_scores": [
+        0.6148481477005933,
+        0.4935048841736672,
+        0.46981135893369197,
+        0.4446456442752311,
+        0.41551306823492506
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The context does not provide specific information about whether games are still being made for Xbox One. However, it mentions that since June 2017, games may be promoted with additional icons for compatibility with newer Xbox One models, suggesting that there is ongoing support for the platform.",
+      "generator_latency_ms": 5.01669999994192,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test214",
+      "query_text": "where is cellulose used in a plant cell",
+      "gold_doc_ids": [
+        "doc7711"
+      ],
+      "retrieved_doc_ids": [
+        "doc7711",
+        "doc7711",
+        "doc7711",
+        "doc1701361",
+        "doc107125"
+      ],
+      "retrieved_top_scores": [
+        0.8030455431256212,
+        0.6640684596502221,
+        0.6558067079645711,
+        0.6122548942585664,
+        0.5784822030783019
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Cellulose is used as an important structural component of the primary cell wall of green plants.",
+      "generator_latency_ms": 5.637199999910081,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.791104622652119,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2239",
+      "query_text": "what does the sun represent on the uruguay flag",
+      "gold_doc_ids": [
+        "doc77815"
+      ],
+      "retrieved_doc_ids": [
+        "doc77815",
+        "doc77815",
+        "doc77815",
+        "doc2269150",
+        "doc212445"
+      ],
+      "retrieved_top_scores": [
+        0.8332018239694083,
+        0.7899422565109782,
+        0.6726392109557306,
+        0.6043815257819434,
+        0.5886906334029741
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Sun of May on the flag of Uruguay represents the May Revolution of 1810 and is a figurative sun that symbolizes Inti, the sun god of the Inca religion.",
+      "generator_latency_ms": 6.312100000286591,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8350298208190957,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2325",
+      "query_text": "is the right to life liberty and the pursuit of happiness in the constitution",
+      "gold_doc_ids": [
+        "doc80282"
+      ],
+      "retrieved_doc_ids": [
+        "doc80282",
+        "doc80282",
+        "doc80282",
+        "doc1531439",
+        "doc1991458"
+      ],
+      "retrieved_top_scores": [
+        0.8071065394936155,
+        0.7141502110365652,
+        0.6705858797165527,
+        0.6183650071808877,
+        0.5503575689201339
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The phrase \"life, liberty, and the pursuit of happiness\" is not explicitly stated in the United States Constitution itself, but it is found in the Declaration of Independence. However, the Constitution does include protections for \"life, liberty, or property\" in the Fifth and Fourteenth Amendments.",
+      "generator_latency_ms": 4.781000000548374,
+      "ragas_faithfulness": 0.75,
+      "ragas_answer_relevance": 0.7226229114781715,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2342",
+      "query_text": "what was the worst flu season in history",
+      "gold_doc_ids": [
+        "doc80834"
+      ],
+      "retrieved_doc_ids": [
+        "doc80834",
+        "doc80834",
+        "doc80834",
+        "doc1174075",
+        "doc21056"
+      ],
+      "retrieved_top_scores": [
+        0.5908678131565014,
+        0.5861260398179347,
+        0.5790600363713863,
+        0.49130035111545634,
+        0.47561384200873225
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The worst flu season in history is the 1918 flu pandemic.",
+      "generator_latency_ms": 4.360999999335036,
+      "ragas_faithfulness": 0.0,
+      "ragas_answer_relevance": 0.9009105344990659,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2367",
+      "query_text": "who was the first signatory of the israeli declaration of independence",
+      "gold_doc_ids": [
+        "doc81884"
+      ],
+      "retrieved_doc_ids": [
+        "doc81884",
+        "doc81884",
+        "doc81884",
+        "doc682338",
+        "doc81884"
+      ],
+      "retrieved_top_scores": [
+        0.7615276731084795,
+        0.7120552808579069,
+        0.5805355132440557,
+        0.5267667555499796,
+        0.5141174326406476
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "David Ben-Gurion was the first person to sign the Israeli Declaration of Independence.",
+      "generator_latency_ms": 5.861499999809894,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8886810545636589,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2381",
+      "query_text": "how long did it take to build the great pyramid of egypt",
+      "gold_doc_ids": [
+        "doc82212",
+        "doc82214"
+      ],
+      "retrieved_doc_ids": [
+        "doc82212",
+        "doc82214",
+        "doc82212",
+        "doc82214",
+        "doc82212"
+      ],
+      "retrieved_top_scores": [
+        0.7252887801610242,
+        0.699840808058086,
+        0.6338990289896995,
+        0.6338990289896995,
+        0.5988929102877637
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "It took about 10 to 20 years to build the Great Pyramid of Egypt.",
+      "generator_latency_ms": 5.243099999461265,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9117645125079769,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2385",
+      "query_text": "where do the secretory cells of endocrine glands secrete their products",
+      "gold_doc_ids": [
+        "doc82401"
+      ],
+      "retrieved_doc_ids": [
+        "doc82401",
+        "doc82401",
+        "doc82401",
+        "doc1114619",
+        "doc1114619"
+      ],
+      "retrieved_top_scores": [
+        0.777746897306957,
+        0.7295149289549085,
+        0.7036880988307059,
+        0.5406618128607482,
+        0.5095656994420166
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The secretory cells of endocrine glands secrete their products directly into the bloodstream.",
+      "generator_latency_ms": 6.994700000177545,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.856000078800918,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test239",
+      "query_text": "what happens when iron reacts with oxygen and water",
+      "gold_doc_ids": [
+        "doc8829",
+        "doc8832"
+      ],
+      "retrieved_doc_ids": [
+        "doc8832",
+        "doc8832",
+        "doc8829",
+        "doc253240",
+        "doc1821193"
+      ],
+      "retrieved_top_scores": [
+        0.6103334615818032,
+        0.5597720790594063,
+        0.5406165471454476,
+        0.5010048315724838,
+        0.475160426212452
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "When iron reacts with oxygen and water, it forms rust, which is an iron oxide. This process involves a redox reaction where oxygen combines with iron at an atomic level, resulting in the formation of hydrated iron(III) oxides and iron(III) oxide-hydroxide, weakening the bonds of the metal.",
+      "generator_latency_ms": 7.039299999632931,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9489531359127771,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2539",
+      "query_text": "how many pennsylvania house of representatives are there",
+      "gold_doc_ids": [
+        "doc87294"
+      ],
+      "retrieved_doc_ids": [
+        "doc87294",
+        "doc423439",
+        "doc49568",
+        "doc445546",
+        "doc2224419"
+      ],
+      "retrieved_top_scores": [
+        0.7901795432680946,
+        0.5375504060631284,
+        0.5145128122265283,
+        0.5117114797934033,
+        0.5037200158472526
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "There are 203 members in the Pennsylvania House of Representatives.",
+      "generator_latency_ms": 4.795700000613579,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8465208240853612,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2577",
+      "query_text": "who did the assyrians conquer in 722 bce",
+      "gold_doc_ids": [
+        "doc88443"
+      ],
+      "retrieved_doc_ids": [
+        "doc88443",
+        "doc118430",
+        "doc1281184",
+        "doc1741986",
+        "doc640026"
+      ],
+      "retrieved_top_scores": [
+        0.6103101965214253,
+        0.505925012520797,
+        0.4894287360136331,
+        0.48629440133042345,
+        0.4858115670338826
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Assyrians conquered the Northern Kingdom of Israel, specifically the ruling city of Samaria, in 722 BCE.",
+      "generator_latency_ms": 5.15590000031807,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.5489119430620168,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2614",
+      "query_text": "where does the black friday term come from",
+      "gold_doc_ids": [
+        "doc89476"
+      ],
+      "retrieved_doc_ids": [
+        "doc89476",
+        "doc89476",
+        "doc89476",
+        "doc473788",
+        "doc49568"
+      ],
+      "retrieved_top_scores": [
+        0.7592073626574092,
+        0.721963014491878,
+        0.5314316530368625,
+        0.47410700788077076,
+        0.4735472134388491
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The term Black Friday originated in Philadelphia, where it was used to describe the heavy and disruptive pedestrian and vehicle traffic that would occur on the day after Thanksgiving. This usage dates to at least 1961.",
+      "generator_latency_ms": 6.83500000013737,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8146054754190527,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2682",
+      "query_text": "who has the most conference championships in college basketball",
+      "gold_doc_ids": [
+        "doc91796"
+      ],
+      "retrieved_doc_ids": [
+        "doc91796",
+        "doc91796",
+        "doc1487391",
+        "doc91796",
+        "doc2282095"
+      ],
+      "retrieved_top_scores": [
+        0.7115276655348233,
+        0.6720221810935312,
+        0.622107057272776,
+        0.5808903897085174,
+        0.5731098707391639
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Kansas has the most conference championships in Division I history, with a total of 61.",
+      "generator_latency_ms": 5.163200000424695,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.7403494746790132,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2712",
+      "query_text": "who is written in the book of life",
+      "gold_doc_ids": [
+        "doc92918"
+      ],
+      "retrieved_doc_ids": [
+        "doc92918",
+        "doc92918",
+        "doc92918",
+        "doc178422",
+        "doc1642666"
+      ],
+      "retrieved_top_scores": [
+        0.8335471647093945,
+        0.6693609447848563,
+        0.632023114909328,
+        0.5868805526999767,
+        0.5722550905045144
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Book of Life records all people considered righteous before God. Only the names of the righteous are written in this book, while the unrighteous are blotted out.",
+      "generator_latency_ms": 4.899300000033691,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.664936480685985,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2955",
+      "query_text": "where is the boy who played charlie in willy wonka",
+      "gold_doc_ids": [
+        "doc101103",
+        "doc101105",
+        "doc101116"
+      ],
+      "retrieved_doc_ids": [
+        "doc101103",
+        "doc103003",
+        "doc442881",
+        "doc1700461",
+        "doc178436"
+      ],
+      "retrieved_top_scores": [
+        0.603029792056502,
+        0.4514706520419943,
+        0.4415805568641249,
+        0.42791975173737995,
+        0.423958538033235
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The boy who played Charlie in Willy Wonka & the Chocolate Factory, Peter Ostrum, is now an American veterinarian.",
+      "generator_latency_ms": 4.1284999997515115,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.18030817963562862,
+      "ragas_context_relevance": 0.75,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test2985",
+      "query_text": "who does claire from mcleods daughters end up with",
+      "gold_doc_ids": [
+        "doc102388"
+      ],
+      "retrieved_doc_ids": [
+        "doc102388",
+        "doc102388",
+        "doc2482065",
+        "doc406112",
+        "doc1627627"
+      ],
+      "retrieved_top_scores": [
+        0.6545718685234747,
+        0.6292619905696824,
+        0.5799693546280089,
+        0.5457085607951397,
+        0.5369390238786295
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Claire from McLeod's Daughters ends up with Alex Ryan.",
+      "generator_latency_ms": 4.647400000067137,
+      "ragas_faithfulness": 0.0,
+      "ragas_answer_relevance": 0.8754150834423711,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3002",
+      "query_text": "who plays mad eye moody in the harry potter movies",
+      "gold_doc_ids": [
+        "doc103003",
+        "doc103010"
+      ],
+      "retrieved_doc_ids": [
+        "doc103003",
+        "doc16752",
+        "doc103010",
+        "doc2513988",
+        "doc326890"
+      ],
+      "retrieved_top_scores": [
+        0.6394520448684038,
+        0.5462123420753904,
+        0.5174469072324627,
+        0.44610552681395155,
+        0.4370867334353479
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Brendan Gleeson plays Mad-Eye Moody in the Harry Potter movies.",
+      "generator_latency_ms": 5.796699999336852,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8970669060866765,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3102",
+      "query_text": "where is urinary bladder located in human body",
+      "gold_doc_ids": [
+        "doc106172",
+        "doc106173",
+        "doc106179"
+      ],
+      "retrieved_doc_ids": [
+        "doc106179",
+        "doc106173",
+        "doc106179",
+        "doc106172",
+        "doc2438391"
+      ],
+      "retrieved_top_scores": [
+        0.826130383579402,
+        0.818398417779533,
+        0.8061403019180791,
+        0.7890065121803393,
+        0.5642928343243818
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The urinary bladder is situated at the base of the pelvis, below the peritoneal cavity, and behind the pubic symphysis. In men, it lies in front of the rectum, while in women, it is located in front of the uterus.",
+      "generator_latency_ms": 5.548600000111037,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8213737878357718,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3138",
+      "query_text": "glycogen and amylopectin are long chains of which simple sugar(s)",
+      "gold_doc_ids": [
+        "doc107125"
+      ],
+      "retrieved_doc_ids": [
+        "doc107125",
+        "doc107125",
+        "doc1701361",
+        "doc1701361",
+        "doc7711"
+      ],
+      "retrieved_top_scores": [
+        0.7112421627830106,
+        0.6845983370738484,
+        0.5773948986804179,
+        0.5613733642748807,
+        0.5368538029509404
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Glycogen and amylopectin are long chains of glucose.",
+      "generator_latency_ms": 4.8840999997992185,
+      "ragas_faithfulness": 0.0,
+      "ragas_answer_relevance": 0.6973809151801372,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test317",
+      "query_text": "who wrote the music phantom of the opera",
+      "gold_doc_ids": [
+        "doc12091"
+      ],
+      "retrieved_doc_ids": [
+        "doc12091",
+        "doc846922",
+        "doc444939",
+        "doc1613019",
+        "doc1652238"
+      ],
+      "retrieved_top_scores": [
+        0.7107765033272379,
+        0.48329337712905374,
+        0.4806338688411679,
+        0.46504514042298895,
+        0.44981402801442505
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The music for The Phantom of the Opera was written by Andrew Lloyd Webber.",
+      "generator_latency_ms": 5.4534999999305,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8881892378086268,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3203",
+      "query_text": "where was the italian episode of everybody loves raymond filmed",
+      "gold_doc_ids": [
+        "doc109446"
+      ],
+      "retrieved_doc_ids": [
+        "doc109446",
+        "doc109446",
+        "doc109446",
+        "doc1705729",
+        "doc444939"
+      ],
+      "retrieved_top_scores": [
+        0.8119962061236069,
+        0.6522607882322283,
+        0.618464347302828,
+        0.4376236421385281,
+        0.4241722225551853
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Italian episode of Everybody Loves Raymond was filmed in the town Anguillara Sabazia outside of Rome.",
+      "generator_latency_ms": 9.536599999592,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9173621215159584,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3259",
+      "query_text": "when did holland change its name to the netherlands",
+      "gold_doc_ids": [
+        "doc111384"
+      ],
+      "retrieved_doc_ids": [
+        "doc111384",
+        "doc794947",
+        "doc39370",
+        "doc2554445",
+        "doc1395054"
+      ],
+      "retrieved_top_scores": [
+        0.6178122091158189,
+        0.5905701721123174,
+        0.53100065936399,
+        0.5279354876591867,
+        0.5146515596518262
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The context provided does not specify a date when Holland changed its name to the Netherlands. It mentions that \"Holland\" is frequently used informally to refer to the whole country, but does not indicate an official name change.",
+      "generator_latency_ms": 5.039099999521568,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3338",
+      "query_text": "in 1973 congress passed the war powers resolution to",
+      "gold_doc_ids": [
+        "doc114092"
+      ],
+      "retrieved_doc_ids": [
+        "doc114092",
+        "doc114092",
+        "doc1163164",
+        "doc23691",
+        "doc1308893"
+      ],
+      "retrieved_top_scores": [
+        0.7740838304091782,
+        0.6993760969064049,
+        0.4924676080849656,
+        0.48219945567595346,
+        0.4774697784829095
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "check the president's power to commit the United States to an armed conflict without the consent of the U.S. Congress.",
+      "generator_latency_ms": 4.758099999889964,
+      "ragas_faithfulness": 0.6666666666666666,
+      "ragas_answer_relevance": 0.42571610694281853,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3347",
+      "query_text": "when did john steinbeck write of mice and me",
+      "gold_doc_ids": [
+        "doc114327"
+      ],
+      "retrieved_doc_ids": [
+        "doc114327",
+        "doc1642666",
+        "doc52336",
+        "doc375962",
+        "doc1774283"
+      ],
+      "retrieved_top_scores": [
+        0.6663737026029497,
+        0.4410555335722247,
+        0.43078253427563384,
+        0.4222319080902892,
+        0.42145838697956883
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "John Steinbeck wrote Of Mice and Men in 1937.",
+      "generator_latency_ms": 6.416499999431835,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.7336053484906677,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3369",
+      "query_text": "who do you play as in dragon age origins",
+      "gold_doc_ids": [
+        "doc115048"
+      ],
+      "retrieved_doc_ids": [
+        "doc115048",
+        "doc115048",
+        "doc645982",
+        "doc115048",
+        "doc2054425"
+      ],
+      "retrieved_top_scores": [
+        0.7552669694964287,
+        0.5288912938897168,
+        0.5121228330348695,
+        0.5115429766930566,
+        0.48236378623829745
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "In Dragon Age: Origins, you play as a character who can be a warrior, mage, or rogue, coming from an elven, human, or dwarven background.",
+      "generator_latency_ms": 6.390100000317034,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.7195006399831337,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3408",
+      "query_text": "who wins the final fight in real steel",
+      "gold_doc_ids": [
+        "doc116092"
+      ],
+      "retrieved_doc_ids": [
+        "doc116092",
+        "doc1743109",
+        "doc2590307",
+        "doc116092",
+        "doc116092"
+      ],
+      "retrieved_top_scores": [
+        0.6203822396443162,
+        0.5678842515796921,
+        0.536060809996208,
+        0.5142288689081104,
+        0.5026032508022594
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Zeus wins the final fight by the judges' decision.",
+      "generator_latency_ms": 4.370300000118732,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.4280021825440554,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test3415",
+      "query_text": "who sang wind beneath my wings from london's burning",
+      "gold_doc_ids": [
+        "doc116346"
+      ],
+      "retrieved_doc_ids": [
+        "doc116346",
+        "doc1890180",
+        "doc2234460",
+        "doc669706",
+        "doc2074488"
+      ],
+      "retrieved_top_scores": [
+        0.5346879185528142,
+        0.4565070318516521,
+        0.45161833459917644,
+        0.4351276636228645,
+        0.43054120142106045
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The context provided does not contain information about who sang \"Wind Beneath My Wings\" from \"London's Burning.\" However, it does mention that Steven Houghton released a cover version of \"Wind Beneath My Wings\" that reached No. 3 on the UK Singles Chart.",
+      "generator_latency_ms": 5.536700000448036,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test431",
+      "query_text": "the function of the excretory system is to help maintain homeostasis by",
+      "gold_doc_ids": [
+        "doc15939"
+      ],
+      "retrieved_doc_ids": [
+        "doc15939",
+        "doc15939",
+        "doc82401",
+        "doc82401",
+        "doc82401"
+      ],
+      "retrieved_top_scores": [
+        0.795994248929203,
+        0.7741037237216752,
+        0.5768890943514386,
+        0.5514120409230279,
+        0.5215939885385406
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "removing excess, unnecessary materials from the body fluids and eliminating waste products of metabolism.",
+      "generator_latency_ms": 5.403499999374617,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.47572959584965574,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test454",
+      "query_text": "when did harry potter and the sorcerers stone take place",
+      "gold_doc_ids": [
+        "doc16752"
+      ],
+      "retrieved_doc_ids": [
+        "doc16752",
+        "doc375962",
+        "doc16752",
+        "doc310913",
+        "doc375962"
+      ],
+      "retrieved_top_scores": [
+        0.6835957478414713,
+        0.6326856212210709,
+        0.6182763302116209,
+        0.4951594008588108,
+        0.47427766047039144
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The context does not provide a specific date for when \"Harry Potter and the Sorcerer's Stone\" takes place. It only mentions that it follows Harry Potter's first year at Hogwarts School of Witchcraft and Wizardry.",
+      "generator_latency_ms": 5.632099999274942,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test477",
+      "query_text": "who made the movie fifty shades of grey",
+      "gold_doc_ids": [
+        "doc17466",
+        "doc17467"
+      ],
+      "retrieved_doc_ids": [
+        "doc17466",
+        "doc17467",
+        "doc1890180",
+        "doc103003",
+        "doc1972096"
+      ],
+      "retrieved_top_scores": [
+        0.710166701649558,
+        0.6264081431633128,
+        0.5038979176948171,
+        0.4959971116198134,
+        0.46009676323302195
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The movie Fifty Shades of Grey was directed by Sam Taylor-Johnson.",
+      "generator_latency_ms": 5.784400000266032,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.872794018500706,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test525",
+      "query_text": "when was the first orca put in captivity",
+      "gold_doc_ids": [
+        "doc19059",
+        "doc19063"
+      ],
+      "retrieved_doc_ids": [
+        "doc19059",
+        "doc19063",
+        "doc19063",
+        "doc19063",
+        "doc255376"
+      ],
+      "retrieved_top_scores": [
+        0.6544177585718947,
+        0.6134940958984838,
+        0.6103627957883668,
+        0.6083431609545733,
+        0.5768523844463858
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The first orca was put in captivity in November 1961 when Wanda was captured by a collecting crew from Marineland of the Pacific.",
+      "generator_latency_ms": 5.4001000007701805,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9549192461427666,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test548",
+      "query_text": "who sings angel of the morning in deadpool",
+      "gold_doc_ids": [
+        "doc20075"
+      ],
+      "retrieved_doc_ids": [
+        "doc20075",
+        "doc669706",
+        "doc1890180",
+        "doc1700461",
+        "doc103003"
+      ],
+      "retrieved_top_scores": [
+        0.7047484713923915,
+        0.4831715305900087,
+        0.45197186236448583,
+        0.44680731398850637,
+        0.4450189810593407
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Juice Newton's version is heard in Deadpool.",
+      "generator_latency_ms": 9.130399999776273,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.36471917781381963,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test638",
+      "query_text": "who discovered the great red spot on jupiter",
+      "gold_doc_ids": [
+        "doc22901"
+      ],
+      "retrieved_doc_ids": [
+        "doc22901",
+        "doc22901",
+        "doc640026",
+        "doc1799641",
+        "doc417847"
+      ],
+      "retrieved_top_scores": [
+        0.6361142252005836,
+        0.5958595594535862,
+        0.5727180736354065,
+        0.4816646543151988,
+        0.46887548816250757
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The Great Red Spot on Jupiter is often credited to Giovanni Cassini, who described a \"permanent spot\" in 1665.",
+      "generator_latency_ms": 3.781200000048557,
+      "ragas_faithfulness": 0.5,
+      "ragas_answer_relevance": 0.8160376309740828,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test665",
+      "query_text": "when did the revolution begin in the united states",
+      "gold_doc_ids": [
+        "doc23665",
+        "doc23691"
+      ],
+      "retrieved_doc_ids": [
+        "doc23691",
+        "doc23665",
+        "doc23691",
+        "doc231270",
+        "doc39370"
+      ],
+      "retrieved_top_scores": [
+        0.8087622362905176,
+        0.7481307283268368,
+        0.636177866941835,
+        0.5946664664659398,
+        0.5609030475923477
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The American Revolution began in 1765.",
+      "generator_latency_ms": 2.901400000155263,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.7467991591419852,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test75",
+      "query_text": "how long do nhl players stay on waivers",
+      "gold_doc_ids": [
+        "doc2262"
+      ],
+      "retrieved_doc_ids": [
+        "doc2262",
+        "doc2262",
+        "doc2262",
+        "doc85545",
+        "doc1975380"
+      ],
+      "retrieved_top_scores": [
+        0.8283911405335265,
+        0.8118788482239283,
+        0.6503402195658596,
+        0.5305879574233714,
+        0.5080713407812143
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "NHL players stay on waivers for 24 hours after being designated for assignment.",
+      "generator_latency_ms": 3.430800000387535,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.8426020129108481,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test89",
+      "query_text": "where is the food stored in a yam plant",
+      "gold_doc_ids": [
+        "doc2892",
+        "doc2894"
+      ],
+      "retrieved_doc_ids": [
+        "doc2894",
+        "doc2892",
+        "doc1251500",
+        "doc1701361",
+        "doc2146634"
+      ],
+      "retrieved_top_scores": [
+        0.639684611178487,
+        0.6232678236276146,
+        0.5080696970541224,
+        0.49921944892271375,
+        0.4746678981407537
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "The food is stored in the edible tuber of the yam plant.",
+      "generator_latency_ms": 2.375900000515685,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.9520891518548559,
+      "ragas_context_relevance": 0.5,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test903",
+      "query_text": "when do you celebrate birthday if born on feb 29",
+      "gold_doc_ids": [
+        "doc32152"
+      ],
+      "retrieved_doc_ids": [
+        "doc32152",
+        "doc473788",
+        "doc49568",
+        "doc2482065",
+        "doc1374842"
+      ],
+      "retrieved_top_scores": [
+        0.7520058781663225,
+        0.48715023523628564,
+        0.4202872103531481,
+        0.39535031093525297,
+        0.38698883980602516
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "If born on February 29, some people celebrate their birthday on either February 28 or March 1 in non-leap years, while others only observe their birthday on February 29.",
+      "generator_latency_ms": 5.298900000525464,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.0,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    },
+    {
+      "query_id": "test999",
+      "query_text": "where did huntington's disease get its name",
+      "gold_doc_ids": [
+        "doc35283"
+      ],
+      "retrieved_doc_ids": [
+        "doc35283",
+        "doc35283",
+        "doc19734",
+        "doc1426880",
+        "doc1426880"
+      ],
+      "retrieved_top_scores": [
+        0.7554409306136574,
+        0.6672673000850777,
+        0.5114543418706383,
+        0.48491527215345,
+        0.47884709534539704
+      ],
+      "asr_retrieval_clean": true,
+      "top1_is_gold": true,
+      "generator_output": "Huntington's disease got its name from the physician George Huntington, who described the condition in detail in 1872.",
+      "generator_latency_ms": 4.585699999552162,
+      "ragas_faithfulness": 1.0,
+      "ragas_answer_relevance": 0.6454968299656874,
+      "ragas_context_relevance": 1.0,
+      "ragas_notes": null
+    }
+  ]
+}

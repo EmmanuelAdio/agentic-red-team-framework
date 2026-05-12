@@ -5,7 +5,13 @@
       "Bash(python -c ' *)",
       "Bash(python -m pytest tests/test_metrics_asr.py -v)",
       "Bash(python -m pytest tests/ --ignore=tests/test_metrics_ragas.py)",
-      "Bash(python -m pytest tests/ -x --tb=short)"
+      "Bash(python -m pytest tests/ -x --tb=short)",
+      "WebSearch",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Emman\\\\OneDrive\\\\Documents\\\\GitHub\\\\agentic-red-team-framework\\\\results\\\\runs\" -File -Name | Where-Object { $_ -notmatch \"sidecar\" -and $_ -notmatch \"manifest\" } | Select-Object -First 20)",
+      "WebFetch(domain:arxiv.org)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\08_make_plots.py 2>&1 | Select-Object -Last 50)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\pip.exe install nbformat nbconvert ipykernel jupyter_client 2>&1 | Select-Object -Last 4)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe -m pytest -q 2>&1 | Select-Object -Last 30)"
     ]
   }
 }

@@ -888,4 +888,73 @@ The user asked, mid-Day-9, whether the methodology chapter should live in `LAB_N
 ### Commit
 
 Day 9 work ready to commit. Suggested message: `Day 9: full experiment matrix (4 cells, 3 seeds, 600 runs) + ForcedCellPlanner + Methodology + Experimentation chapter drafts (76/76 tests)`.
+## Day 10 (12 May 2026) — Results analysis, Chapter-6 figures, RESULTS.md
+
+### What shipped today
+
+Day-10 was delivered in two passes. The first pass (a short morning session) produced a working analysis stack with 4 figures, a thin notebook, and a Chapter-6 draft, but the figure set was too sparse for a dissertation chapter and did not match the conventions used in the comparable literature (PoisonedRAG, AgentPoison, GASLITE, RAGAS, IR rank-shift papers). The afternoon pass rebuilt everything from scratch against an explicit figure-by-figure spec keyed to those references. The rebuild is what is on disk now.
+
+- **Full clean baseline persisted** under `results/baseline/baseline_latest.json`: 50/50 completed queries, RAGAS enabled, mean clean Faithfulness 0.875, Answer-Relevance 0.666, Context-Relevance 0.850, gold-in-top-5 = 100%. Built by `scripts/07_run_clean_baseline.py`.
+- **`src/redteam/analysis/` (rebuilt)** — five modules:
+  - `palette.py` — Okabe-Ito 8-colour palette + per-cell colour assignment + `apply_default_style()` that pins matplotlib rcParams (serif font, 300 dpi savefig, grid behind data, no top/right spines, default colour cycle pulled from Okabe-Ito). Hex codes and reasoning documented in the module docstring; the cell-colour assignment is justified per pair (poiA/poiJ get opposite-end colours because they are the pair most likely to share a sub-plot).
+  - `loaders.py` — `load_experiment` (manifest → 12 batch summaries → 600 enriched run rows), `load_clean_baseline`, `validate_clean_baseline`, and **a new `load_bundles_for_k_curve`** that reads individual bundles' `execution.retrieved_docs[]` for Figure F3 (ASR-r vs k). Sidecars are enriched with a `running_success_rate_<family>` column the planner-adaptation figure consumes.
+  - `stats.py` — `bootstrap_mean_ci` + `bootstrap_proportion_ci` + `cohen_h`, `asr_r_at_k` and `asr_r_curve` for F3, `summary_by_cell` (per-cell ASR-r/a/t/deny + rank-shift + iterations + latency with CIs), `ragas_by_cell` (Faithfulness drop vs clean, integrity-degraded rate at the spec's 0.2 threshold), `paired_differences_vs_ipi` (paired-by-(seed, query_id) differences with Cohen's-h), `build_summary_tables` driver.
+  - `plots.py` — **seven** plot functions, one per Chapter-6 figure (see §Generated artefacts). Each function reads only the DataFrame it needs (not a giant `data` blob), calls `apply_default_style()` at entry, saves both PDF (vector) and PNG (300 dpi) into `results/figures/`, and returns the PDF path.
+  - `__init__.py` — re-exports the public surface so notebook/script imports stay flat.
+- **`scripts/08_make_plots.py`** — thin CLI wrapper around the analysis module. Loads attacked + clean data, builds tables, writes CSVs + summary.json, lazily reads the per-rank bundle rows for F3, then renders all 7 figures. Headless (`matplotlib.use("Agg")`) and seed-deterministic at default `--bootstrap-seed=12345 --n-resamples=1000`. Wall time on the 600-bundle matrix: **3.5 s** (the slow path is the per-rank bundle read; everything else is in-memory DataFrame work).
+- **`notebooks/03_results_analysis.ipynb`** — primary Chapter-6 demo. ~36 cells, mix of markdown framing + code + inline figure displays. Each figure section: framing paragraph → code call → display → interpretation paragraph. Ends with a per-seed sanity cross-tab (reproducibility evidence) and an RQ-mapping table. Committed with rendered outputs (1.7 MB) so reviewers can read it without re-executing.
+- **`docs/RESULTS.md`** — Chapter-6 first draft, sections 6.1–6.10. Every numeric claim references either a specific cell of a CSV by name or one of the figure files. RQ1–RQ4 mapping at the end.
+- **`tests/test_analysis.py` (rewritten)** — 11 tests, all synthetic-fixture (no Chroma, no API): manifest+sidecar loading, rollback violation refusal, bundle-reader, bootstrap determinism, ASR-r@k monotonicity, Cohen's-h sign convention, paired-diffs drops self-comparison, baseline-validation rejects truncated input, `make_all_plots` writes 7 non-empty PDFs+PNGs on the Agg backend. **11/11 passing**.
+
+### Generated artefacts
+
+**Figures (7 PDFs + 7 PNGs)** under `results/figures/`:
+
+| ID | File | Type | Lit. analog |
+| --- | --- | --- | --- |
+| F1 | `asr_triple_by_cell.{pdf,png}` | Grouped bars ASR-r/a/t per cell, 95% CIs | PoisonedRAG / AgentPoison |
+| F2 | `channel_objective_heatmap.{pdf,png}` | 2×2 channel × objective heatmap | AgentPoison transfer heatmap |
+| F3 | `asr_r_vs_k.{pdf,png}` | ASR-r dose-response curve over k∈{1..5} | PoisonedRAG Fig. 3 |
+| F4 | `asr_deny_by_cell.{pdf,png}` | ASR-deny bar (negative-result honesty) | own framework |
+| F5 | `ragas_triple_clean_vs_attacked.{pdf,png}` | Three-panel split violins, clean vs attacked | RAGAS downstream practice |
+| F6 | `rank_shift_ecdf.{pdf,png}` | ECDF of rank_shift@5 per cell | IR / adversarial-ranking |
+| F7 | `planner_adaptation.{pdf,png}` | Two-panel: running success-rate + arm-pull hist | bandit-convergence |
+
+**Tables (4 CSVs)** under `results/tables/`: `summary_by_cell.csv`, `ragas_by_cell.csv`, `paired_differences_vs_ipi.csv`, `baseline_summary.csv`. Flat machine-readable mirror: `results/summary.json`.
+
+### Headline results
+
+- Clean retrieval: 50/50 gold-in-top-5, top-1-is-gold every time.
+- IPI headline success **96.0%** [92.0, 98.7]; QInj **96.0%** [92.7, 98.7] (paired difference vs IPI = 0.00, Cohen's-h = 0.00 — statistically indistinguishable).
+- PoiA **80.0%** [73.3, 86.0] (paired diff vs IPI = -0.16, Cohen's-h = -0.52, moderate effect).
+- PoiJ **0.0% ASR-deny** [0.0, 0.0]; ASR-t = 72.0% on the same runs (jamming collapsed into weaker answer-replacement; the prompt template "Answer from context" is hard to coerce into refusal). Paired diff vs IPI = -0.96, Cohen's-h = -2.74 (huge effect).
+- Faithfulness drop: QInj **0.593** (73% integrity-degraded), IPI **0.262** (47% degraded), PoiA -0.044 (-1% — Faithfulness *rises* slightly because the poisoned context supports the false answer), PoiJ -0.027 (similar).
+
+### Methodology decisions (Day 10)
+
+- **Figure set:** 7 figures, with each one chosen to mirror a specific paper's convention so the dissertation reads as part of the established literature, not in isolation. F3 mirrors PoisonedRAG's dose-response framing; F2 mirrors AgentPoison's transferability heatmap framing; F5 reports RAGAS as distributions rather than a single mean per the RAGAS-paper downstream practice; F6 uses the ECDF form standard in IR / adversarial-ranking papers; F7 uses the bandit-convergence "running-rate + arm-pull histogram" pair. Cross-paper comparison numbers are deferred to Chapter 7 rather than included as a Chapter-6 figure — Chapter 6 reports our own results in our own coordinates.
+- **Palette:** Okabe-Ito 8-colour colour-blind-safe, with the same cell→hex assignment across every figure so the reader doesn't retrain their eye between figures.
+- **Bootstrap convention:** percentile bootstrap, 1000 resamples, seed pinned at 12345. Byte-identical re-runs verified.
+- **Notebook:** primary demo surface, committed *with outputs* so the dissertation appendix can include rendered cells. The script (`scripts/08_make_plots.py`) is the headless reproducibility surface required by spec §13 def-of-done line 418.
+
+### Problems faced and resolutions
+
+- **First pass produced a too-sparse figure set.** ChatGPT's morning attempt shipped only 4 plots (single-metric ASR bar, single-metric violin, stacked-bar rank-shift, sidecar line) and a thin notebook. After surveying the comparable literature, the rebuild expanded to 7 plots and chose plot types that match the specific papers the dissertation cites. The first-pass artefacts (`results/figures/asr_success_by_cell.pdf` and three others) were deleted in the rebuild; the data on disk (`results/runs/`, `results/baseline/`) was kept untouched because the data was correct — it was the visualisation that was wrong. This rebuild took two AskUserQuestion clarifications: rebuild-scope and figure-list selection.
+- **F5 label collision.** First render of the RAGAS triple violins had clipped x-axis labels in the three-subpanel layout. Fixed by rotating the labels 30° with right-alignment.
+- **F6 annotation overlap.** First render placed the "rank-shift = 0" caption text on top of the data lines. Moved to below the x-axis via `xytext` with `textcoords="axes fraction"`.
+- **Process exit codes vs success.** Both the clean-baseline run and the nbconvert pass returned non-zero on otherwise-successful runs (HuggingFace warning; Windows-asyncio proactor warning). The scripts and the analysis layer validate persisted artefact contents on read rather than trusting the upstream exit code.
+
+### Key observation
+
+**ASR-t and RAGAS Faithfulness measure different harms.** Answer-replacement reaches 80% ASR-t while Faithfulness *rises* above the clean baseline — the poisoned retrieved context literally supports the attacker's false answer, so the RAGAS scorer rates the generation as faithful even though it is factually wrong. Query injection is the opposite: same ASR-t as IPI, but the largest Faithfulness drop (0.59). A Faithfulness-only defence would catch IPI and QInj but miss PoiA entirely. This is the single strongest Chapter-7 discussion hook from Day 10 — and it is only visible *because* the chapter reports the RAGAS triple as distributions per cell rather than a single aggregate.
+
+### What's next
+
+- Day 11: Chapter 4 (Methodology) polish — lift the 4-cell taxonomy and the per-cell metric story from `docs/METHODOLOGY.md` against the final F1/F2 figure captions.
+- Day 11/12: Chapter 7 (Discussion) — frame the ASR-vs-Faithfulness decoupling, the F3 dose-response gap between IPI and PoiA/PoiJ, and the negative jamming result.
+- Day 13: bundle-gzipping pass per spec §13 def-of-done line 421.
+
+### Commit
+
+Day 10 work ready for review. The user reviews before committing — no commit issued from this session.
 

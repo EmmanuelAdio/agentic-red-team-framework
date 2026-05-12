@@ -1,0 +1,4 @@
+comparison,cell,n_pairs,cell_success_rate,ipi_success_rate,mean_difference,ci_low,ci_high,cohens_h_vs_ipi
+poiA_minus_ipi,poiA,150,0.8,0.96,-0.16,-0.24666666666666667,-0.08666666666666667,-0.5245793764209505
+poiJ_minus_ipi,poiJ,150,0.0,0.96,-0.96,-0.9866666666666667,-0.9266666666666666,-2.7388768120091314
+qInj_minus_ipi,qInj,150,0.96,0.96,0.0,-0.04666666666666667,0.04,0.0
