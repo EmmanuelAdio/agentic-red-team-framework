@@ -13,6 +13,8 @@ aiohttp==3.13.5
     #   langchain-community
 aiosignal==1.4.0
     # via aiohttp
+altair==6.1.0
+    # via streamlit
 annotated-doc==0.0.4
     # via typer
 annotated-types==0.7.0
@@ -21,6 +23,8 @@ anyio==4.13.0
     # via
     #   httpx
     #   openai
+    #   starlette
+    #   streamlit
     #   watchfiles
 appdirs==1.4.4
     # via ragas
@@ -33,8 +37,12 @@ attrs==26.1.0
     #   referencing
 bcrypt==5.0.0
     # via chromadb
+blinker==1.9.0
+    # via streamlit
 build==1.5.0
     # via chromadb
+cachetools==7.1.1
+    # via streamlit
 certifi==2026.4.22
     # via
     #   httpcore
@@ -49,6 +57,7 @@ chromadb==1.5.9
     #   langchain-chroma
 click==8.3.3
     # via
+    #   streamlit
     #   typer
     #   uvicorn
 colorama==0.4.6
@@ -85,6 +94,8 @@ distro==1.9.0
     # via openai
 docstring-parser==0.18.0
     # via instructor
+duckdb==1.5.2
+    # via -r requirements.in
 durationpy==0.10
     # via kubernetes
 executing==2.2.1
@@ -107,6 +118,10 @@ fsspec[http]==2026.2.0
     #   datasets
     #   huggingface-hub
     #   torch
+gitdb==4.0.12
+    # via gitpython
+gitpython==3.1.50
+    # via streamlit
 googleapis-common-protos==1.74.0
     # via opentelemetry-exporter-otlp-proto-grpc
 greenlet==3.5.0
@@ -124,7 +139,9 @@ hf-xet==1.4.3
 httpcore==1.0.9
     # via httpx
 httptools==0.7.1
-    # via uvicorn
+    # via
+    #   streamlit
+    #   uvicorn
 httpx==0.28.1
     # via
     #   chromadb
@@ -162,11 +179,15 @@ ipython==9.13.0
     # via ipykernel
 ipython-pygments-lexers==1.1.1
     # via ipython
+itsdangerous==2.2.0
+    # via streamlit
 jedi==0.20.0
     # via ipython
 jinja2==3.1.6
     # via
+    #   altair
     #   instructor
+    #   pydeck
     #   torch
 jiter==0.13.0
     # via
@@ -179,7 +200,9 @@ jsonpatch==1.33
 jsonpointer==3.1.1
     # via jsonpatch
 jsonschema==4.26.0
-    # via chromadb
+    # via
+    #   altair
+    #   chromadb
 jsonschema-specifications==2025.9.1
     # via jsonschema
 jupyter-client==8.8.0
@@ -270,6 +293,10 @@ multiprocess==0.70.19
     # via datasets
 mypy-extensions==1.1.0
     # via typing-inspect
+narwhals==2.21.0
+    # via
+    #   altair
+    #   plotly
 nest-asyncio==1.6.0
     # via
     #   ipykernel
@@ -289,11 +316,13 @@ numpy==2.4.4
     #   matplotlib
     #   onnxruntime
     #   pandas
+    #   pydeck
     #   ragas
     #   scikit-learn
     #   scikit-network
     #   scipy
     #   sentence-transformers
+    #   streamlit
     #   transformers
 oauthlib==3.3.1
     # via requests-oauthlib
@@ -335,6 +364,7 @@ overrides==7.7.0
     # via chromadb
 packaging==26.2
     # via
+    #   altair
     #   build
     #   datasets
     #   huggingface-hub
@@ -344,20 +374,26 @@ packaging==26.2
     #   marshmallow
     #   matplotlib
     #   onnxruntime
+    #   plotly
     #   pytest
+    #   streamlit
     #   transformers
 pandas==3.0.2
     # via
     #   -r requirements.in
     #   datasets
+    #   streamlit
 parso==0.8.7
     # via jedi
 pillow==12.2.0
     # via
     #   matplotlib
     #   ragas
+    #   streamlit
 platformdirs==4.9.6
     # via jupyter-core
+plotly==6.7.0
+    # via -r requirements.in
 pluggy==1.6.0
     # via pytest
 prompt-toolkit==3.0.52
@@ -371,6 +407,7 @@ protobuf==6.33.6
     #   googleapis-common-protos
     #   onnxruntime
     #   opentelemetry-proto
+    #   streamlit
 psutil==7.2.2
     # via
     #   ipykernel
@@ -378,7 +415,9 @@ psutil==7.2.2
 pure-eval==0.2.3
     # via stack-data
 pyarrow==24.0.0
-    # via datasets
+    # via
+    #   datasets
+    #   streamlit
 pybase64==1.4.3
     # via chromadb
 pydantic==2.13.3
@@ -402,6 +441,8 @@ pydantic-settings==2.14.0
     # via
     #   chromadb
     #   langchain-community
+pydeck==0.9.2
+    # via streamlit
 pygments==2.20.0
     # via
     #   ipython
@@ -427,6 +468,8 @@ python-dotenv==1.2.2
     #   -r requirements.in
     #   pydantic-settings
     #   uvicorn
+python-multipart==0.0.28
+    # via streamlit
 pyyaml==6.0.3
     # via
     #   chromadb
@@ -462,6 +505,7 @@ requests==2.33.1
     #   langsmith
     #   requests-oauthlib
     #   requests-toolbelt
+    #   streamlit
     #   tiktoken
 requests-oauthlib==2.0.0
     # via kubernetes
@@ -496,6 +540,8 @@ six==1.17.0
     # via
     #   kubernetes
     #   python-dateutil
+smmap==5.0.3
+    # via gitdb
 sniffio==1.3.1
     # via openai
 sqlalchemy==2.0.49
@@ -504,6 +550,10 @@ sqlalchemy==2.0.49
     #   langchain-community
 stack-data==0.6.3
     # via ipython
+starlette==1.0.0
+    # via streamlit
+streamlit==1.57.0
+    # via -r requirements.in
 sympy==1.14.0
     # via torch
 tenacity==9.1.4
@@ -513,6 +563,7 @@ tenacity==9.1.4
     #   instructor
     #   langchain-community
     #   langchain-core
+    #   streamlit
 threadpoolctl==3.6.0
     # via scikit-learn
 tiktoken==0.12.0
@@ -524,6 +575,8 @@ tokenizers==0.22.2
     #   chromadb
     #   langchain-huggingface
     #   transformers
+toml==0.10.2
+    # via streamlit
 torch==2.11.0
     # via sentence-transformers
 tornado==6.5.5
@@ -558,6 +611,7 @@ typer==0.25.1
 typing-extensions==4.15.0
     # via
     #   aiosignal
+    #   altair
     #   anyio
     #   chromadb
     #   grpcio
@@ -575,6 +629,8 @@ typing-extensions==4.15.0
     #   referencing
     #   sentence-transformers
     #   sqlalchemy
+    #   starlette
+    #   streamlit
     #   torch
     #   typing-inspect
     #   typing-inspection
@@ -595,7 +651,11 @@ uuid-utils==0.14.1
     #   langchain-core
     #   langsmith
 uvicorn[standard]==0.46.0
-    # via chromadb
+    # via
+    #   chromadb
+    #   streamlit
+watchdog==6.0.0
+    # via streamlit
 watchfiles==1.1.1
     # via uvicorn
 wcwidth==0.7.0
@@ -603,7 +663,9 @@ wcwidth==0.7.0
 websocket-client==1.9.0
     # via kubernetes
 websockets==16.0
-    # via uvicorn
+    # via
+    #   streamlit
+    #   uvicorn
 xxhash==3.7.0
     # via
     #   datasets

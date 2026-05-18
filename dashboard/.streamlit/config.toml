@@ -1,0 +1,20 @@
+[theme]
+base = "light"
+primaryColor = "#D85A30"
+backgroundColor = "#FAFAF7"
+secondaryBackgroundColor = "#F5F4EE"
+textColor = "#1F1F1B"
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Hide the "Deploy" toolbar entry — this is a local research artefact,
+# not an app deployed to Streamlit Community Cloud. "minimal" still
+# shows Rerun + Settings; "viewer" would hide those too.
+toolbarMode = "minimal"

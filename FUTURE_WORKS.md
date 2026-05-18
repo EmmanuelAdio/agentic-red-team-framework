@@ -71,6 +71,52 @@ when ASR-t crosses a threshold (e.g. via webhook to Slack / GitHub).
 into a production-assurance tool — the natural commercialisation /
 open-source-tooling angle.
 
+### 1.4 Interactive experimentation from the dashboard *(blocked-by-deadline)*
+
+The Streamlit dashboard shipped on Day 14 / 15 is *read-only* — it
+surfaces bundles that already exist under `results/runs/` and
+`data/runs/`. A natural extension is to make the dashboard a **launch
+surface** for new experiment cells, so the reader can answer "what
+happens if I rerun this query under attack configuration X?" without
+dropping back to `scripts/06_run_experiments.py` and a fresh shell.
+
+Concrete scope:
+
+1. **Wire the "Re-run with different seed" button on Run Detail.** It
+   currently shows a toast saying "Not implemented in Build A". Replace
+   with a small form that takes a seed override, queues a single-run
+   batch via `BundleStore`, polls for the new bundle, and routes the
+   reader to its Run Detail page when it lands.
+2. **"Re-run with different config" expansion.** Extend the form with
+   knobs the bundle schema already records per-run:
+   - `attack_channel` ∈ `{corpus, query}`
+   - `payload_source` ∈ `{template, llm}`
+   - `retriever_top_k`
+   - `llm_temperature`
+
+   so the reader can isolate the contribution of each knob without
+   leaving the page. The natural quick test the channel × payload-source
+   matrix gap calls for (see §2.8 below) — flip a working IPI run from
+   `template` to `llm` and watch the marker drop out — would become a
+   two-click interaction here.
+3. **Home-page "Run experiment" panel.** A small form on the Overview
+   page that submits a `(family, strategy, channel, payload_source,
+   n_seeds)` tuple as a new cell, with a progress card that streams
+   per-run completions until the batch finishes. Effectively the
+   `06_run_experiments.py --quick` flow exposed as a browser form.
+
+*Why it matters:* today the dashboard is descriptive; this turns it into
+an interactive harness. Useful for live supervisor / examiner demos
+("now let's see what happens if we flip the channel to `query`"). The
+notebook (`notebooks/03_results_analysis.ipynb`) already covers the
+analyst's flow; this would cover the *interactive interrogator's* flow.
+
+*Why deferred:* needs a job-runner abstraction on top of the current
+synchronous batch loop (so the Streamlit thread does not block on a
+5-minute LLM call), and a result-watch loop to refresh the dashboard
+when bundles land. Estimate 2–3 days of work — out of dissertation
+scope, but a clean follow-up.
+
 ---
 
 ## 2. Attack-family extensions (within the current threat model)
@@ -176,6 +222,47 @@ single-turn QA.
 *Why it matters:* most production RAG deployments are stateful chatbots,
 not single-turn QA endpoints — current scope under-represents the
 operational target surface.
+
+### 2.8 Balanced `(channel × payload_source)` experiment matrix *(blocked-by-deadline)*
+
+The Day-9 matrix exercises four cells (`ipi`, `poiA`, `poiJ`, `qInj`),
+but within each cell the `(attack_channel, payload_source)` split is
+unbalanced. Measured across the 600-bundle run:
+
+| family              | strategy             | channel | template | llm |  ASR-t (tpl) | ASR-t (llm) |
+| ------------------- | -------------------- | ------- | -------: | --: | -----------: | ----------: |
+| prompt_injection    | instruction_override | corpus  |      144 |   6 |        100 % |         0 % |
+| query_injection     | prefix_injection     | query   |      141 |   9 |        100 % |        33 % |
+| corpus_poisoning    | answer_replacement   | corpus  |        3 | 147 |        100 % |        80 % |
+| corpus_poisoning    | jamming              | corpus  |        0 | 150 |            — |         0 % |
+
+This is partly by design (the template carries the literal marker
+substring that ASR-a substring-matches against — an LLM-rephrased
+payload usually drops or paraphrases the marker, and the run records
+ASR-t = 0 even when the attack would be considered successful by a
+human judge), and partly an oversight (jamming has no template arm at
+all; corpus poisoning has only n = 3 template runs).
+
+A clean follow-up is to **promote `payload_source` to a first-class
+condition** in the manifest and run the full Cartesian product
+`{family × strategy × channel × payload_source}` with a balanced *n*
+per cell (e.g. 50 queries × 3 seeds for every payload-source).
+
+The current metric definition would need a small adjustment in lockstep
+with this: the LLM-rephrased arm should be scored by an LLM-judge
+ASR-a (§5.2) rather than the literal-marker substring, otherwise the
+comparison is mostly measuring *marker preservation* rather than
+*attack strength* — which is what the unbalanced ASR-t = 0 % for
+LLM-source IPI in the table above is really telling us.
+
+*Why it matters:* the current results carry a template-vs-LLM confound
+the dissertation has to disclose as a limitation; a balanced matrix
+would let the next iteration of this work make a clean claim about
+which delivery channel actually works best.
+
+*Why deferred:* doubles the matrix size, depends on §5.2 (LLM-judge
+ASR-a), and only marginally improves the headline story for the
+current deadline.
 
 ---
 

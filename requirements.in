@@ -16,3 +16,6 @@ pandas
 matplotlib
 ipykernel
 pytest
+streamlit
+plotly
+duckdb

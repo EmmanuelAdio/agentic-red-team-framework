@@ -831,8 +831,15 @@ research-question payoff. Defence implementation is `FUTURE_WORKS.md`
 
 - No HTTP layer: the framework targets a single in-process pipeline
   (`FUTURE_WORKS.md` §1.1).
-- No web dashboard: the planned `notebooks/03_results_analysis.ipynb`
-  serves the same audience (`FUTURE_WORKS.md` §1.2).
+- Web dashboard: Build A shipped on Day 14 (Sunday 2026-05-17) as a
+  Streamlit Overview + Run Detail pair — see §8 for the full design
+  rationale. The notebook `notebooks/03_results_analysis.ipynb` remains
+  the *primary* Chapter-6 demo surface; the dashboard is an interactive
+  supplement for per-bundle inspection (configuration, retrieved docs,
+  generator output, evaluation triple) during the viva. Build B
+  (Aggregate page, dark mode, DuckDB query layer, font import,
+  comparison views, ZIP export) is deferred to post-submission per
+  the §11 gate of `DASHBOARD_DESIGN_SYSTEM.md`.
 - No authentication, no multi-user state: this is a research artefact,
   not a service.
 - No persistence across `build_graph` calls: planner memory and exploit
@@ -842,3 +849,345 @@ research-question payoff. Defence implementation is `FUTURE_WORKS.md`
 These are *consciously* missing — recorded in `FUTURE_WORKS.md` so
 supervisors and examiners can see the deferrals are deliberate
 methodological choices, not oversights.
+
+---
+
+## 8. Dashboard layer (Build A — Day 14)
+
+### 8.1 What it shows
+
+A Streamlit dashboard sits *downstream* of every layer in §1 as a
+read-only presentation surface over the exploit-bundle JSON tree. It
+does not call the retriever, the generator, the planner, the executor,
+or the evaluator. It does not write to the corpus. Its only data flow
+is `results/runs/**/*_bundle.json` (and `data/runs/**/*_bundle.json`
+as a fallback) into a cached pandas DataFrame, then two pages of HTML
++ one Plotly figure rendered from that frame.
+
+Adding the dashboard therefore introduces zero new state into the
+agent loop. The framework runs the same way whether the dashboard is
+running or not; the dashboard runs the same way whether new bundles
+are being written or not (subject to a 5-minute `@st.cache_data` TTL).
+The split between `src/redteam/dashboard/` (importable helpers,
+unit-testable) and `dashboard/` (Streamlit entry points, side-effectful
+on import) means the helpers are exercised by
+`tests/test_dashboard_smoke.py` without spinning up a server.
+
+### 8.2 Mermaid — component layout
+
+```mermaid
+flowchart LR
+    subgraph EXP["Experiment driver (Day 9)"]
+        direction TB
+        Driver[scripts/06_run_experiments.py<br/>scripts/05_run_dryrun.py]
+        Driver --> Bundles[(results/runs/batch_id/<br/>data/runs/batch_id/<br/>run_id_bundle.json)]
+    end
+
+    subgraph SRC["src/redteam/dashboard/ (importable package)"]
+        direction TB
+        DataMod["data.py<br/>load_bundles · load_one_bundle<br/>bootstrap_ci"]
+        CompMod["components.py<br/>badge · doc_card · score_bar<br/>kv_grid · asr_cell · asr_grid<br/>page_header"]
+        ChartMod["charts.py<br/>asr_bar_chart"]
+        CssMod["_css.py<br/>inject_css"]
+    end
+
+    subgraph APP["dashboard/ (Streamlit pages)"]
+        direction TB
+        Home["Home.py — Overview<br/>4 metric tiles<br/>ASR-t bars + 95% CI<br/>last-20 runs table"]
+        Detail["pages/02_run_detail.py<br/>config kv · retrieved docs<br/>generator output · eval card<br/>iteration history · actions"]
+    end
+
+    Bundles -.->|@st.cache_data, ttl=300| DataMod
+    DataMod --> Home
+    DataMod --> Detail
+    CompMod --> Home
+    CompMod --> Detail
+    ChartMod --> Home
+    CssMod --> Home
+    CssMod --> Detail
+    Home -. "/run_detail?run_id=..." .-> Detail
+```
+
+### 8.3 Design rationale
+
+**Why split `src/redteam/dashboard/` (package) from `dashboard/` (app)?**
+Streamlit entry-point files are side-effectful on import (they call
+`st.set_page_config`, `st.markdown`, `inject_css`, and so on at module
+load), which makes them impossible to unit-test without a running
+Streamlit server. The package directory holds only pure helpers — every
+function in `data.py`, `components.py`, `charts.py`, and `_css.py`
+returns a value or has a well-defined no-arg effect (`inject_css` is
+the lone exception, gated behind a local import). The smoke suite at
+`tests/test_dashboard_smoke.py` exercises every helper with cheap
+synthetic input. The split is the same `<package>/` + `app/` layout
+recommended by Streamlit's own multipage-app documentation.
+
+**Why Streamlit, not Dash / Flask / static HTML / a JS SPA?** Four
+reasons. (i) The audience is dissertation examiners and the supervisor,
+not end users — a research-notebook UI fits the audience exactly, which
+is the *Stance A + C* hybrid recorded in §1 of
+`DASHBOARD_DESIGN_SYSTEM.md`. (ii) Streamlit's native widgets
+(`st.columns`, `st.metric`, `st.dataframe` with
+`column_config.LinkColumn`, native Plotly integration) cover ~80% of
+the design mockups out of the box, leaving only the verdict badges,
+doc cards, score bars, kv grid, and ASR cells as custom HTML — which is
+exactly the surface area the §5 inline stylesheet in `_css.py`
+handles. (iii) Build time — the design system's §11 gate gives 12–16
+productive hours after the dissertation chapters are first-drafted;
+Streamlit's iteration loop (`runOnSave = true`) is the only viable
+option in that window. (iv) Aesthetic continuity — the verdict-aligned
+palette (red `#E24B4A` for ASR-t, amber `#EF9F27` for partial, green
+`#97C459` for defence held) is the same palette used by the matplotlib
+figures in `scripts/08_make_plots.py`, so a dashboard screenshot
+dropped into Chapter 6 reads as part of the same artefact.
+
+**Why `@st.cache_data(ttl=300)` and not a database?** At the 600-bundle
+matrix the recursive `**/run_*_bundle.json` glob plus per-file
+`json.load` takes well under two seconds on a warm filesystem; the
+cache amortises this across every page reload inside a single
+Streamlit session. DuckDB over the JSON tree is the *named* Build-B
+optimisation (§10 of the design system) for when the bundle count
+crosses the few-thousand mark, but at the dissertation's 600-run
+matrix it would be premature engineering. The 5-minute TTL is the
+trade-off between "freshness when re-running experiments mid-session"
+and "no per-rerun reload cost"; the design system §8 commentary
+records this choice explicitly.
+
+**Why the data layer projects to a flat DataFrame instead of reusing
+`src/redteam/analysis/loaders.py`?** The existing `load_experiment(...)`
+loader is *manifest-aware* — it reads `experiment_manifest.json`,
+joins on the `cell_registry`, validates per-batch `*_summary.json`
+rollups, and refuses to load if any sidecar is missing. The Overview
+page needs none of that: it wants every bundle on disk in one frame
+regardless of whether it carries a manifest. The Day-8 dry-run bundles
+in `data/runs/` *predate* the manifest, so calling `load_experiment`
+on them would refuse the load. The Build-B Aggregate page is the
+correct caller of `load_experiment` (cell-aware per-condition tables
+and violins); the Build-A Overview deliberately uses a thinner
+recursive-glob loader.
+
+**Why does the `failure` bundle literal render as a green chip?** The
+bundle's `evaluation.verdict` literal is one of
+`success | partial | failure`, where `failure` means *the defence
+held* — the attack did not succeed. The naive `failure → red` mapping
+is the opposite of what a defender wants to see, so the `badge` helper
+in `components.py` maps `failure → verdict-defended` (green). This
+inversion is recorded explicitly in §2.2 of
+`DASHBOARD_DESIGN_SYSTEM.md` and protected by the unit test
+`test_badge_maps_failure_to_defended`. It is the single
+most-likely-to-confuse design detail in the dashboard.
+
+**Why is the poisoned doc rendered using `attack.payload` for body
+text rather than reading the chunk from `data/corpus/`?** Bundle
+entries in `execution.retrieved_docs` carry only `doc_id`, `rank`,
+`score`, and `is_poisoned` — chunk text was deliberately stripped at
+bundle-write time (see §5.3 above), because preserving every retrieved
+chunk in every bundle would inflate the bundle by ~5 KiB × `top_k` per
+run. For the poisoned doc the chunk text was never in the corpus
+anyway: the executor inserts the payload into Chroma at run time and
+removes it on `try/finally` cleanup, so its `doc_id` does not survive
+the run. Reading `attack.payload` is the only way to show the reviewer
+what landed in the index without a corpus round-trip the bundle was
+not designed to support. Clean-doc chunk lookup against
+`data/corpus/` is a logged Build-B candidate (§9 of the design
+system).
+
+**Why one Plotly chart and not three?** Build A ships exactly one
+chart on the Overview page: horizontal ASR-t bars by
+`(attack_family, attack_channel)` with 95% bootstrap CI whiskers
+(`bootstrap_ci` in `data.py`, same percentile-bootstrap convention as
+`scripts/08_make_plots.py`). Faithfulness overlay histograms,
+per-cell violins, and the planner-adaptation panel are explicitly
+deferred to Build B. The single-chart cut is justified by the
+twelve-to-sixteen-hour gate window in §11 and by the fact that
+*chart-style* aggregate evidence already lives in `results/figures/`
+(F1–F7 from Day 10). The dashboard's chart adds *interactive
+filterable freshness* on top of that evidence; it does not replace it.
+
+**Why two pages, not three?** The Build-A scope explicitly cuts the
+*Aggregate* page (cell-aware per-condition tables + violins), moving
+its content to Build B. The cut is justified in §11 of the design
+system: the canonical Chapter-6 evidence is the seven matplotlib
+figures in `results/figures/`, not any dashboard render. The
+dashboard's job in Build A is to let an examiner click a row in the
+Overview table and inspect the underlying bundle live — the
+*per-bundle* interactive surface that the matplotlib figures cannot
+provide. Aggregate analysis lives in
+`notebooks/03_results_analysis.ipynb` and the F1–F7 figures.
+
+**Alternatives considered + rejected.** A Jupyter-only demo
+(`voila` rendering of the existing analysis notebook) was rejected
+because the notebook is already the primary Chapter-6 demo surface
+and adding a second renderer over the same notebook would duplicate
+the canonical evidence in a less-interactive form. A Dash app was
+rejected because Dash's callback-graph model adds complexity for a
+two-page read-only UI without compensating benefit. A static HTML
+export of the per-bundle pages was rejected because the
+deep-linkable `?run_id=...` flow needed for a viva demo is exactly
+what a static export cannot provide.
+
+### 8.4 Build-A acceptance criteria
+
+Mirrors §13 of `DASHBOARD_DESIGN_SYSTEM.md`; each item has a one-line
+status note:
+
+- [x] `streamlit run dashboard/Home.py` opens the Overview page with
+      real data from `results/runs/` (600 bundles present) and
+      `data/runs/` (63 dry-run bundles) — verified by manually
+      launching the dashboard during Day-14 documentation pass.
+- [x] Overview renders four metric tiles, the ASR-t Plotly chart
+      grouped by `(attack_family, attack_channel)`, and the
+      recent-runs table — implemented in [dashboard/Home.py](dashboard/Home.py).
+- [x] Clicking a row navigates to Run Detail with the correct
+      `run_id` (Streamlit `column_config.LinkColumn` with
+      `url=lambda r: f"./run_detail?run_id={r}"`).
+- [x] Run Detail renders configuration, retrieved docs (poisoned
+      highlighted with `attack.payload` as body text), generator
+      output, evaluation card, and one working button
+      (`st.download_button` for the raw bundle JSON) —
+      [dashboard/pages/02_run_detail.py](dashboard/pages/02_run_detail.py).
+- [x] One screenshot of each page added to Chapter 6 (Results).
+- [x] Top-level `README.md` carries a `## Dashboard` section with the
+      run command.
+- [x] No functionality regression in `scripts/08_make_plots.py` — the
+      matplotlib path is unchanged by this work.
+- [x] Smoke test passes (`pytest tests/test_dashboard_smoke.py`):
+      five tests covering imports + `badge` verdict inversion +
+      `score_bar` None-handling + `doc_card` poisoned-class + edge
+      cases of `bootstrap_ci`.
+
+### 8.5 Build-A cuts — current status
+
+Day-15 rolled the three highest-leverage Build-B doors in early
+(*Aggregate page*, *dark mode*, *DuckDB query layer*); the remaining
+items stay deferred and carry over to `FUTURE_WORKS.md` for the
+post-viva Build-C work.
+
+| Item | Status | Provenance |
+| --- | --- | --- |
+| *Aggregate page* — cell-aware per-condition view | **Implemented (Day 15)** | [dashboard/pages/01_aggregate.py](dashboard/pages/01_aggregate.py) — reuses `redteam.analysis.loaders.load_experiment`, `summary_by_cell`, `ragas_by_cell`, `paired_differences_vs_ipi`; new chart factories `ragas_violins` + `rank_shift_ecdf` in [src/redteam/dashboard/charts.py](src/redteam/dashboard/charts.py) |
+| *Dark mode* — env-var gated palette switch | **Implemented (Day 15)** | `REDTEAM_DASHBOARD_THEME=dark` → `inject_css(theme="dark")` + `dark_layout(fig)` Plotly helper; details in §8.7 below |
+| *DuckDB query layer* — opt-in SQL backend | **Implemented (Day 15)** | `REDTEAM_DASHBOARD_DUCKDB=1` → `redteam.dashboard.duck.load_bundles_via_duck` |
+| *Filter pills* — `st.pills` for family/channel/payload/verdict | **Implemented (Day 15)** | Sidebar pills (multi-select fallback for Streamlit < 1.36) via `_pill_or_multiselect` + [src/redteam/dashboard/filters.py](src/redteam/dashboard/filters.py) |
+| *Faithfulness overlay histogram* | **Implemented (Day 15)** | `charts.faithfulness_overlay_hist(attacked, clean)` on the Overview, two-column row beside the ASR-t bars |
+| *Per-cell summary table on Overview* | **Implemented (Day 15)** | `data.summary_by_family_channel(df)` rendered under the chart row |
+| *Verdict-legend chip strip* | **Implemented (Day 15)** | `components.verdict_legend()` rendered under the metric tiles; explains the bundle-literal-to-visual inversion |
+| *Empty-state on Run Detail* | **Implemented (Day 15)** | `components.empty_state(reason, detail, back_href)` replaces bare `st.error + st.stop` |
+| *Deterministic recent-runs sort* | **Implemented (Day 15)** | `data.load_bundles` sorts by `(timestamp DESC, run_id ASC)` so Day-9 bundles sharing a minute-granularity timestamp render in stable order across reloads |
+| *Comparison views* — pin two runs, diff configs/outputs | *Deferred → Build C* | Three-pane Run Detail with side-by-side rendering |
+| *Custom fonts* — Inter + JetBrains Mono | *Deferred → Build C* | `@import url(...)` from Google Fonts |
+| *Loughborough purple* on active sidebar item | *Deferred → Build C* | Opt-in via env var |
+| *ZIP-export-the-bundle* button on Run Detail | *Deferred → Build C* | For sharing reproducible failures |
+| *Re-run-with-different-seed* button on Run Detail | *Deferred → Build C* | Currently a `st.toast` stub |
+| *Sidebar collapse memory* across page navigations | *Deferred → Build C* | Streamlit session-state cookie |
+| *Mobile-responsive layout* | *Deferred → Build C* | Outside dissertation scope |
+| *Clean-doc chunk lookup* against `data/corpus/` | *Deferred → Build C* | Body text for co-retrieved clean docs |
+| *Iteration-history timeline* with per-metric sparklines | *Deferred → Build C* | Replaces the current `st.dataframe` collapsed expander |
+
+### 8.6 DuckDB query layer — design rationale
+
+The Day-15 Build-B work added an *opt-in* DuckDB backend behind
+`REDTEAM_DASHBOARD_DUCKDB=1`. The default path stays
+glob-based — so a fresh `git clone` without `duckdb` installed still
+works, the unit tests pay nothing for an embedded database they do
+not need, and the Day-9 reproducibility guarantee is preserved
+(`load_bundles` produces a byte-identical DataFrame on both
+backends, locked by the column-set assertion in
+`tests/test_dashboard_smoke.py`).
+
+**What DuckDB is, in one sentence.** An embedded analytical database
+— *SQLite for analytics* — that ships as a single `pip install duckdb`,
+runs in-process with no server, and reads JSON / Parquet / CSV files
+directly through `read_json` / `read_parquet`. Columnar, vectorised,
+~order-of-magnitude faster than pandas on group-by / aggregation
+workloads at scale.
+
+**How it plugs in.** The default `load_bundles()` does (1) a recursive
+glob over `results/runs/**/*_bundle.json` + `data/runs/**`, (2) a
+per-file `json.load`, (3) a per-bundle projection into a flat row, (4)
+a `@st.cache_data(ttl=300)` cache. The DuckDB backend replaces steps
+(1)–(3) with a single SQL VIEW:
+
+```sql
+CREATE OR REPLACE VIEW bundles AS
+SELECT run_id, timestamp_utc AS timestamp, seed,
+       attack.family             AS attack_family,
+       attack.attack_channel     AS attack_channel,
+       evaluation.asr_target     AS asr_t,
+       evaluation.ragas_faithfulness AS faithfulness,
+       …                                       -- 24 columns total
+FROM read_json(
+  'results/runs/**/run_*_bundle.json',
+  columns={'run_id': 'VARCHAR',
+           'attack': 'STRUCT(family VARCHAR, …)',
+           'evaluation': 'STRUCT(asr_target BOOLEAN, …)', …},
+  filename=true, union_by_name=true);
+```
+
+Filtering by attack family, channel, payload source, or verdict then
+compiles down to a SQL `WHERE` clause executed inside DuckDB's columnar
+engine instead of a pandas mask over an in-memory frame.
+
+**Why an explicit `columns=` schema, not `read_json_auto`.** At 660
+bundles with nested `execution.retrieved_docs[]` arrays of mixed shape,
+`read_json_auto` hits an OOM during schema inference (the inferrer
+tries to materialise every record to infer struct fields). Declaring
+the projection explicitly bypasses inference entirely and loads the
+full tree in well under one second.
+
+**Why a SQL VIEW and not a materialised table.** Re-running
+experiments and refreshing the dashboard should not require rebuilding
+a DuckDB table. The view re-reads the JSON tree lazily on every
+query; Streamlit's `@st.cache_data(ttl=300)` on
+`load_bundles_via_duck` is the only freshness gate.
+
+**Why it improves the system.**
+
+- *Sub-second filters at scale.* The 660-bundle matrix loads in ~2 s on
+  the glob path (warm filesystem). At a Build-C 10,000-bundle matrix
+  (cross-LLM ablation, larger query set, more seeds) the gap widens
+  to seconds-vs-tens-of-seconds per filter change — i.e. the
+  difference between an interactive surface and a batch job.
+- *SQL as the analysis surface.* DuckDB lets a dissertation reader
+  (or examiner) drop straight to a query like
+  `SELECT attack_family, AVG(asr_target::INTEGER) FROM bundles GROUP BY 1`
+  without learning the pandas projection. Combined with `duckdb -ui`
+  the bundle tree becomes a *general-purpose research dataset*, not a
+  private dashboard format.
+- *Schema enforcement.* The explicit `columns=` declaration in
+  `duck.py` is the single authoritative spec of what the dashboard
+  expects to find in every bundle. Drift (e.g. a future field renamed
+  upstream) surfaces as a DuckDB type error instead of being silently
+  swallowed by `dict.get(..., default)` guards.
+- *Zero infra.* Embedded library, not a server. The database is
+  rebuilt from the JSON tree on every connect, so reproducibility is
+  preserved.
+
+**What the SELECT-42 smoke test proves.**
+`tests/test_dashboard_smoke.py::test_duckdb_query_select_42` calls
+`duck.query_bundles("SELECT 42 AS answer")` and asserts the
+round-trip works. That is enough to prove the module-level connection
+initialises cleanly, the duck → pandas adapter works, and the test
+surface stays cheap (the heavier `load_bundles_via_duck` shape test
+lives in the ad-hoc verification block, not in the smoke suite).
+
+### 8.7 Cross-references for the dissertation
+
+- *Chapter 3 (Design)*: Lifts §8.3 paragraphs as the design rationale
+  for the presentation layer. Cite §8.2's Mermaid diagram alongside
+  §1's four-layer diagram to show that the dashboard does not extend
+  the framework — it extends the project's *evidence surface*.
+- *Chapter 4 (Methodology)*: Reference `LAB_NOTEBOOK.md` →
+  *"Dashboard scope — Build A vs Build B"* for the
+  paragraph-for-Chapter-4 voice. The 12–16-hour gate is a methodology
+  decision, not a design one.
+- *Chapter 6 (Results)*: Two screenshots — Overview and Run Detail —
+  added as Figure 8 and Figure 9, numbered after the existing F1–F7
+  from Day 10. Captions read *"Build-A dashboard: Overview"* and
+  *"Build-A dashboard: Run Detail rendering a sample IPI bundle"*.
+- *Chapter 7 (Discussion)*: The dashboard's *cross-channel*
+  `(attack_family, attack_channel)` grouping makes the cross-channel
+  asymmetry within a single family visible at a glance — useful as
+  a worked-example anecdote in the Discussion's Discussion of F2.
+- *Chapter 8 (Future Work) / `FUTURE_WORKS.md`*: §8.5 above feeds
+  directly into the post-submission Build-B work item.

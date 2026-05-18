@@ -11,7 +11,18 @@
       "WebFetch(domain:arxiv.org)",
       "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe scripts\\\\08_make_plots.py 2>&1 | Select-Object -Last 50)",
       "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\pip.exe install nbformat nbconvert ipykernel jupyter_client 2>&1 | Select-Object -Last 4)",
-      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe -m pytest -q 2>&1 | Select-Object -Last 30)"
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe -m pytest -q 2>&1 | Select-Object -Last 30)",
+      "Bash(.venv/Scripts/python.exe -c \"import streamlit, plotly; print\\('streamlit', streamlit.__version__\\); print\\('plotly', plotly.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pip --version)",
+      "Bash(.venv/Scripts/python.exe -m piptools --help)",
+      "Bash(.venv/Scripts/python.exe -m piptools compile requirements.in --output-file=requirements.txt)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_dashboard_smoke.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pip install streamlit plotly)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_dashboard_smoke.py -q)",
+      "Bash(.venv/Scripts/python.exe -m pip install duckdb)",
+      "Bash(python -m pytest tests/test_dashboard_smoke.py -q)",
+      "Bash(PYTHONPATH=src python -c ' *)"
     ]
   }
 }
