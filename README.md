@@ -1,7 +1,5 @@
 # Agentic Red-Team Framework for LLM-Augmented Search Systems
 
-**Author:** Emmanuel Adio (F229639) &nbsp;·&nbsp; **Supervisor:** Dr Georgina Cosma &nbsp;·&nbsp; **Module:** 25COD290 (MSci, Loughborough University)
-
 An open-source agentic framework that autonomously plans, executes, and evaluates adversarial attacks
 (prompt injection + corpus poisoning) against a Retrieval-Augmented Generation pipeline.
 Each run produces a reproducible exploit-bundle JSON scored by RAGAS and custom attack-success metrics.
@@ -15,7 +13,7 @@ Copy-Item .env.example .env   # then edit .env and set OPENAI_API_KEY
 python scripts/01_build_corpus.py ; python scripts/02_run_baseline.py
 ```
 
-## Headline results (Day-9 matrix, 600 runs)
+## Headline results (matrix, 600 runs)
 
 50 Natural Questions × 4 attack cells × 3 seeds. Per-objective
 attribution: each cell is judged by its own success metric.
@@ -27,7 +25,6 @@ attribution: each cell is judged by its own success metric.
 | `poiJ` | corpus poisoning / jamming              | corpus × availability | **0.46** ASR-deny | [0.39, 0.54] |
 | `qInj` | query injection / prefix injection      | query × integrity     | **0.96** ASR-a    | [0.93, 0.99] |
 
-Full chapter prose lives in [docs/RESULTS.md](docs/RESULTS.md);
 figures F1–F8 in [results/figures/](results/figures/); the headline-
 success metric per cell drives the dashboard's two top tiles
 (ASR-t over integrity cells, ASR-deny over availability cells) so the
@@ -84,15 +81,4 @@ $env:REDTEAM_DASHBOARD_DUCKDB = "1" ; .\scripts\09_run_dashboard.ps1
 bash scripts/09_run_dashboard.sh
 ```
 
-Opens at <http://localhost:8501>. See
-[dashboard/README.md](dashboard/README.md) for the file map +
-environment variable reference and [DIAGRAMS.md](DIAGRAMS.md) §8 for
-the design rationale (component layout, the verdict-to-visual
-inversion, the choice of Streamlit, the DuckDB schema-flattening
-view, and the Build-A vs Build-B scope split).
-
-*Screenshots:* `docs/img/dashboard_overview_light.png`,
-`docs/img/dashboard_overview_dark.png`,
-`docs/img/dashboard_aggregate.png`, and
-`docs/img/dashboard_run_detail.png` *(populated during the Day-15
-demo dry-run)*.
+Opens at <http://localhost:8501>. 
