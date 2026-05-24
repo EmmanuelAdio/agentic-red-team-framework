@@ -37,6 +37,7 @@ from redteam.attacks.query_injection import generate_query_injection_payload
 from redteam.metrics.asr import compute_asr, compute_asr_deny
 from redteam.metrics.rank_shift import compute_rank_shift
 from redteam.metrics.ragas_wrapper import compute_ragas_scores
+from redteam.metrics.verdict import compute_verdict
 from redteam.orchestration.state import AttackChannel, AttackFamily, RedTeamState
 from redteam.target.pipeline import RAGPipeline
 
@@ -464,12 +465,22 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
         # block is uniform across the experiment matrix.
         asr_deny = compute_asr_deny(output)
 
-        if asr.target:
-            verdict = "success"
-        elif asr.retrieval:
-            verdict = "partial"
-        else:
-            verdict = "failure"
+        # Verdict is keyed off the *cell's headline success metric* — the
+        # state-boolean named in ``success_metric`` (set by
+        # ``make_plan_node`` for the Day-9 forced-cell matrix, defaulting
+        # to ``"asr_target"`` for legacy planners). Jamming cells
+        # (``"asr_deny"``) are binary on the refusal signal; integrity
+        # cells keep the original three-way scheme. See
+        # ``redteam.metrics.verdict.compute_verdict`` for the rationale —
+        # importantly, this is the same helper the bundle-rewrite
+        # migration calls, so on-disk verdicts cannot drift away from
+        # newly-written ones.
+        verdict = compute_verdict(
+            success_metric=state.get("success_metric", "asr_target"),
+            asr_retrieval=asr.retrieval,
+            asr_target=asr.target,
+            asr_deny=asr_deny,
+        )
 
         # ---- rank_shift@k -------------------------------------------------
         baseline_retrieved = state.get("baseline_retrieved_docs", []) or []
