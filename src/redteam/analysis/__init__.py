@@ -12,7 +12,8 @@ Public surface:
 - :func:`plot_asr_triple_by_cell` (F1), :func:`plot_channel_objective_heatmap` (F2),
   :func:`plot_asr_r_vs_k` (F3), :func:`plot_asr_deny_by_cell` (F4),
   :func:`plot_ragas_triple_violins` (F5), :func:`plot_rank_shift_ecdf` (F6),
-  :func:`plot_planner_adaptation` (F7), :func:`make_all_plots`
+  :func:`plot_planner_adaptation` (F7),
+  :func:`plot_poij_outcome_decomposition` (F8), :func:`make_all_plots`
 - :data:`CELL_COLOURS`, :data:`CELL_ORDER`, :func:`apply_default_style`
 """
 
@@ -42,6 +43,7 @@ from redteam.analysis.plots import (
     plot_asr_triple_by_cell,
     plot_channel_objective_heatmap,
     plot_planner_adaptation,
+    plot_poij_outcome_decomposition,
     plot_ragas_triple_violins,
     plot_rank_shift_ecdf,
 )
@@ -101,5 +103,6 @@ __all__ = [
     "plot_ragas_triple_violins",
     "plot_rank_shift_ecdf",
     "plot_planner_adaptation",
+    "plot_poij_outcome_decomposition",
     "make_all_plots",
 ]

@@ -162,7 +162,7 @@ def plot_asr_triple_by_cell(
     ax.set_xticklabels([CELL_DISPLAY.get(c, c) for c in cells])
     ax.set_ylim(0.0, 1.05)
     ax.set_ylabel("Attack-success rate (proportion)")
-    ax.set_title("Figure F1 - ASR-r / ASR-a / ASR-t per attack cell (95% bootstrap CI)")
+    # ax.set_title("Figure F1 - ASR-r / ASR-a / ASR-t per attack cell (95% bootstrap CI)")
     ax.legend(loc="lower right", ncols=3, title=None)
     ax.set_axisbelow(True)
     fig.tight_layout()
@@ -226,7 +226,7 @@ def plot_channel_objective_heatmap(
     ax.set_yticklabels([o.capitalize() for o in objectives])
     ax.set_xlabel("Delivery channel")
     ax.set_ylabel("Adversarial objective")
-    ax.set_title("Figure F2 - Headline attack success by channel x objective")
+    # ax.set_title("Figure F2 - Headline attack success by channel x objective")
 
     # Tile annotations: black text on the lighter tiles, white on the darker
     # ones, to keep the labels legible regardless of the underlying rate.
@@ -300,7 +300,7 @@ def plot_asr_r_vs_k(
 
     ax.set_xlabel("Retrieval depth $k$")
     ax.set_ylabel("ASR-r (retrieval-stage success rate)")
-    ax.set_title("Figure F3 - ASR-r vs retrieval depth (95% bootstrap CI over seeds)")
+    # ax.set_title("Figure F3 - ASR-r vs retrieval depth (95% bootstrap CI over seeds)")
     ax.set_xticks(list(ks))
     ax.set_ylim(0.0, 1.05)
     ax.legend(title="Corpus-channel cells", loc="lower right")
@@ -326,11 +326,14 @@ def plot_asr_deny_by_cell(
 ) -> Path:
     """F4: ASR-deny per cell with 95% bootstrap CIs.
 
-    The jamming cell (``poiJ``) targets *availability* via ASR-deny; the
-    others target integrity and report ASR-deny for completeness. A 0%
-    ASR-deny for jamming is a substantive negative finding (the
-    framework's jamming strategy does not coerce the LLM into refusing
-    or punting on the answer), and the figure shows it without hiding.
+    The jamming cell (``poiJ``) targets *availability* via ASR-deny;
+    the others target integrity and report ASR-deny for completeness.
+    Post-Day-10 fix (early-exit on availability objective), ``poiJ``
+    reports a non-trivial ASR-deny — the iter-0 template payload
+    reliably coerces a refusal on a substantial fraction of queries.
+    Figure F8 decomposes the four (asr_deny × asr_target) outcome
+    buckets for ``poiJ`` so the reader can see what the cell does on
+    the queries where ASR-deny did *not* fire.
     """
     apply_default_style()
 
@@ -365,7 +368,7 @@ def plot_asr_deny_by_cell(
     ax.set_xticklabels([CELL_DISPLAY.get(c, c) for c in cells])
     ax.set_ylim(0.0, max(1.0, max(highs) * 1.10 if highs else 1.0))
     ax.set_ylabel("ASR-deny (refusal / non-answer rate)")
-    ax.set_title("Figure F4 - ASR-deny per cell (jamming = availability objective)")
+    # ax.set_title("Figure F4 - ASR-deny per cell (jamming = availability objective)")
     fig.tight_layout()
     return _savefig(fig, out_dir, stem)
 
@@ -492,10 +495,10 @@ def plot_ragas_triple_violins(
         if ax is axes[0]:
             ax.set_ylabel("RAGAS score (0-1)")
 
-    fig.suptitle(
-        "Figure F5 - RAGAS triple: clean baseline vs each attacked cell",
-        y=1.02,
-    )
+    # fig.suptitle(
+    #     "Figure F5 - RAGAS triple: clean baseline vs each attacked cell",
+    #     y=1.02,
+    # )
     fig.tight_layout()
     return _savefig(fig, out_dir, stem)
 
@@ -552,7 +555,7 @@ def plot_rank_shift_ecdf(
     )
     ax.set_xlabel("rank_shift@5 (positions displaced)")
     ax.set_ylabel("Empirical CDF")
-    ax.set_title("Figure F6 - rank_shift@5 distribution per cell (150 runs each)")
+    # ax.set_title("Figure F6 - rank_shift@5 distribution per cell (150 runs each)")
     ax.set_ylim(0.0, 1.02)
     ax.legend(title="Cell", loc="lower right")
     fig.tight_layout(rect=(0.0, 0.06, 1.0, 1.0))
@@ -685,10 +688,124 @@ def plot_planner_adaptation(
     ax_right.set_title("Arm pulls per family (per seed)")
     ax_right.legend(title=None, loc="upper right", fontsize=8.5)
 
-    fig.suptitle(
-        "Figure F7 - Planner adaptation: epsilon-greedy convergence + arm-pull histogram",
-        y=1.02,
+    # fig.suptitle(
+    #     "Figure F7 - Planner adaptation: epsilon-greedy convergence + arm-pull histogram",
+    #     y=1.02,
+    # )
+    fig.tight_layout()
+    return _savefig(fig, out_dir, stem)
+
+
+# ---------------------------------------------------------------------------
+# F8 - poiJ outcome decomposition (Day-10 addition)
+# ---------------------------------------------------------------------------
+
+
+def plot_poij_outcome_decomposition(
+    runs: pd.DataFrame,
+    out_dir: Path,
+    stem: str = "poij_outcome_decomposition",
+) -> Path:
+    """F8: Four-bucket outcome decomposition for the jamming cell.
+
+    For the 150 ``poiJ`` runs, categorise each by the ``(asr_deny,
+    asr_target)`` pair into four mutually-exclusive buckets:
+
+    * **Refused** (asr_deny=True, asr_target=False) — the jamming win;
+      output starts with a refusal prefix and contains no marker.
+    * **Target hit** (asr_deny=False, asr_target=True) — the LLM emitted
+      the attacker's intended false answer instead of refusing.
+    * **Other answer** (asr_deny=False, asr_target=False) — the LLM
+      returned a response that was neither a refusal nor the target
+      span (typically a hedged or partial answer).
+    * **Refused + target** (both True) — empirically zero because a
+      refusal prefix and a marker substring are structurally
+      incompatible in practice, but plotted for completeness so a future
+      regression that produces an ambiguous outcome surfaces visibly.
+
+    The figure is one horizontal stacked bar so the proportions are
+    immediately legible at a glance. The legend disambiguates the four
+    buckets; segments ≥ 4% are annotated inline with their percentage.
+
+    Why this figure exists: F4 reports the 46% ASR-deny headline for
+    poiJ but does not show what happens on the other 54% of queries.
+    F8 closes that gap — the reader can see that 34% of the runs are
+    still successful integrity attacks (collapsed-attack-mode artefact
+    of the framework's exploit generator), and the remaining 20% are
+    benign-looking answers the attacker did not control.
+    """
+    apply_default_style()
+
+    poij = runs[runs["cell"] == "poiJ"]
+    n = len(poij)
+    if n == 0:
+        raise ValueError(
+            "plot_poij_outcome_decomposition: no poiJ rows in `runs` — "
+            "F8 cannot be produced. Did the runs DataFrame come from a "
+            "cell-filtered subset that excluded poiJ?"
+        )
+    deny_col   = poij["asr_deny"].astype(bool)
+    target_col = poij["asr_target"].astype(bool)
+
+    refused        = int(( deny_col & ~target_col).sum())
+    target_only    = int((~deny_col &  target_col).sum())
+    other_answer   = int((~deny_col & ~target_col).sum())
+    deny_and_targ  = int(( deny_col &  target_col).sum())
+
+    counts = [refused, target_only, other_answer, deny_and_targ]
+    fracs  = [c / n for c in counts]
+    labels = [
+        f"Refused (n={refused})",
+        f"Target hit (n={target_only})",
+        f"Other answer (n={other_answer})",
+        f"Refused + target (n={deny_and_targ})",
+    ]
+    # Palette: refusal blue (availability win), red (integrity hit),
+    # amber (uncontrolled answer), dark grey (the should-be-empty
+    # incompatible-outcome slot — drawn to make a regression visible).
+    colours = ["#0C447C", "#E24B4A", "#EF9F27", "#444444"]
+
+    fig, ax = plt.subplots(figsize=(8.5, 2.6))
+    left = 0.0
+    for frac, colour, label in zip(fracs, colours, labels):
+        ax.barh(
+            [0], [frac],
+            left=left,
+            height=0.55,
+            color=colour,
+            edgecolor="#333333",
+            linewidth=0.5,
+            label=label,
+        )
+        # In-bar percentage annotation for any segment wide enough to
+        # accommodate the text without clipping. Threshold of 4% balances
+        # readability with avoiding overlap on adjacent small segments.
+        if frac >= 0.04:
+            ax.text(
+                left + frac / 2.0, 0,
+                f"{frac:.0%}",
+                ha="center", va="center",
+                fontsize=10.0, color="white", fontweight="bold",
+            )
+        left += frac
+
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(-0.5, 0.5)
+    ax.set_yticks([])
+    ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_xticklabels([f"{int(v * 100)}%" for v in [0.0, 0.25, 0.5, 0.75, 1.0]])
+    ax.set_xlabel(f"share of {n} poiJ runs")
+    # Hide the y-spine since there is only one row.
+    for side in ("top", "left", "right"):
+        ax.spines[side].set_visible(False)
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.32),
+        ncol=2,
+        frameon=False,
+        fontsize=9.0,
     )
+    # ax.set_title("Figure F8 - poiJ outcome decomposition (n=150)")
     fig.tight_layout()
     return _savefig(fig, out_dir, stem)
 
@@ -708,7 +825,7 @@ def make_all_plots(
     bootstrap_seed: int = 12345,
     bundles: pd.DataFrame | None = None,
 ) -> list[Path]:
-    """Produce all 7 Chapter-6 figures in canonical order.
+    """Produce all 8 Chapter-6 figures in canonical order.
 
     The driver takes ``summary_table`` already built (so the figures and
     the CSV stay byte-consistent), and lazily loads the bundle-level
@@ -729,4 +846,5 @@ def make_all_plots(
     paths.append(plot_ragas_triple_violins(data.runs, baseline, out_dir))
     paths.append(plot_rank_shift_ecdf(data.runs, out_dir))
     paths.append(plot_planner_adaptation(data.sidecars, out_dir))
+    paths.append(plot_poij_outcome_decomposition(data.runs, out_dir))
     return paths

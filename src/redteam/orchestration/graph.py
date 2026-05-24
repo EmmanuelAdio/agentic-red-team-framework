@@ -122,10 +122,21 @@ class ForcedCellPlanner:
     None)`` and falls through to ``_DEFAULT_STRATEGY`` for planners that
     don't carry one (the ε-greedy ``Planner`` and ``_RoundRobinPlanner``
     both behave exactly as before).
+
+    The ``success_metric`` attribute drives the loop's early-exit
+    predicate (:func:`should_continue`). Default ``"asr_target"`` matches
+    the integrity-cell behaviour the graph has always had; the jamming
+    cell sets ``"asr_deny"`` so its runs exit when the availability win
+    fires rather than running iter 1+ which would have the LLM exploit
+    generator silently switch to a different attack mode. Duck-typed for
+    the same reason ``strategy`` is — ε-greedy and round-robin planners
+    don't set it, and :func:`make_plan_node` falls through to the
+    ``"asr_target"`` default when absent.
     """
 
     family: AttackFamily
     strategy: str
+    success_metric: str = "asr_target"
 
     def select(self, query_text: str) -> AttackFamily:
         del query_text
@@ -159,11 +170,26 @@ def make_plan_node(planner: PlannerLike):
         # through to the per-family default exactly as before.
         forced_strategy = getattr(planner, "strategy", None)
         strategy = forced_strategy if forced_strategy else _DEFAULT_STRATEGY[family]
-        return {
+        out: dict[str, Any] = {
             "attack_family": family,
             "attack_strategy": strategy,
             "payload_source": "template" if iteration == 0 else "llm",
         }
+        # Day-10 fix (jamming early-exit): a planner may optionally carry a
+        # `success_metric` attribute naming which state-boolean
+        # `should_continue` should treat as the terminal condition. The
+        # `poiJ` cell sets `"asr_deny"`; the three integrity cells leave
+        # it at the default `"asr_target"`. Surfacing it via state (rather
+        # than closing the planner over the predicate) keeps the
+        # `PlannerLike` protocol thin and means the field appears in the
+        # bundle JSON for audit. Duck-typed so the ε-greedy and
+        # round-robin planners remain protocol-compatible without code
+        # changes — `should_continue` defaults to `"asr_target"` when the
+        # field is absent.
+        forced_metric = getattr(planner, "success_metric", None)
+        if forced_metric:
+            out["success_metric"] = forced_metric
+        return out
 
     return plan_node
 
@@ -513,11 +539,25 @@ def make_evaluate_node(planner: PlannerLike, run_ragas: bool = True):
 
 
 def should_continue(state: RedTeamState) -> str:
-    """Loop while iterations remain and we haven't already succeeded."""
+    """Loop while iterations remain and we haven't already succeeded.
+
+    Day-10 fix: terminate on the *cell's own* success metric rather than
+    on ``verdict == "success"`` (which is keyed off ``asr_target`` and
+    therefore mis-handles the jamming cell, whose success is
+    ``asr_deny``). The ``success_metric`` field names the state-boolean
+    to consult — set by :func:`make_plan_node` from
+    :class:`ForcedCellPlanner.success_metric` for the Day-9 matrix; falls
+    back to ``"asr_target"`` for any caller that doesn't set it (the
+    ε-greedy and round-robin planners, and any existing test that
+    initialises state without a planner). All three of
+    ``asr_target``/``asr_answer``/``asr_deny`` are populated by
+    :func:`evaluate_node` before this predicate runs, so the read is
+    always defined.
+    """
     iteration = state.get("iteration", 0)
     max_iter = state.get("max_iterations", 1)
-    verdict = state.get("verdict", "failure")
-    if verdict == "success":
+    metric = state.get("success_metric", "asr_target")
+    if state.get(metric):
         return "end"
     if iteration >= max_iter:
         return "end"
@@ -578,7 +618,7 @@ _legacy_round_robin = _RoundRobinPlanner()
 
 
 def plan_node(state: RedTeamState) -> dict[str, Any]:
-    """Day-5 round-robin planner — preserved for the existing planner test.
+    """round-robin planner — preserved for the existing planner test.
 
     New code should call `make_plan_node(planner)`; this free function is a
     thin wrapper using a module-level round-robin instance.

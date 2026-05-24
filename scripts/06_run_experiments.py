@@ -192,6 +192,116 @@ def _summarise_cell(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Manifest merge (surgical re-runs)
+# ---------------------------------------------------------------------------
+
+
+# Cell labels that participate in the planner sidecar's family-feedback
+# table (see :func:`_run_planner_sidecar`'s ``canonical`` filter). A
+# ``--cells`` selection that does not intersect this set produces no
+# meaningful sidecar signal — the merge path uses this constant to
+# decide whether the original sidecar files should be preserved.
+_CANONICAL_SIDECAR_CELLS = frozenset({"ipi", "poiA", "qInj"})
+
+
+def _merge_manifest_in_place(
+    existing: dict[str, Any],
+    new_seeds: list[dict[str, Any]],
+    selected_labels: list[str],
+    merge_ts: str,
+) -> dict[str, Any]:
+    """Merge a partial re-run's seed/cell entries into the prior full manifest.
+
+    Behaviour:
+
+    * For each seed in ``new_seeds``, locate the matching seed entry in
+      ``existing["seeds"]`` (by ``seed`` value). Within that entry, each
+      cell record in ``existing["seeds"][i]["cells"]`` whose ``label`` is
+      in ``selected_labels`` is replaced by the new run's cell record.
+      Cells not in ``selected_labels`` are preserved verbatim.
+
+    * Per-seed scalar fields (``wall_seconds``, ``n_runs``,
+      ``by_cell_totals``) are recomputed: ``wall_seconds`` is replaced
+      with the new partial-run timing for transparency (the original
+      seed's wall time is no longer meaningful after replacement);
+      ``n_runs`` is recomputed by summing the merged cells' ``n_runs``;
+      ``by_cell_totals`` for replaced labels is overwritten from the new
+      records (recovered from the new ``cells`` entries' totals).
+
+    * The top-level ``manifest_version`` and ``cell_registry`` blocks are
+      preserved from the existing manifest unchanged. ``batch_ts`` is
+      preserved as the *original* run's timestamp (so the manifest still
+      identifies the headline experiment); ``merged_at`` is added to
+      record the partial-rerun's timestamp.
+
+    * If a seed in ``new_seeds`` has no matching entry in ``existing`` (a
+      seed that wasn't part of the original run), the new entry is
+      appended verbatim.
+
+    Pure function — caller is responsible for the file I/O. Kept here
+    rather than inline in ``main()`` so the merge logic is unit-testable
+    in isolation.
+    """
+    merged = dict(existing)
+    merged_seeds: list[dict[str, Any]] = list(existing.get("seeds", []))
+
+    by_seed_idx: dict[int, int] = {
+        s["seed"]: i for i, s in enumerate(merged_seeds) if "seed" in s
+    }
+
+    for new_entry in new_seeds:
+        seed = new_entry["seed"]
+        if seed not in by_seed_idx:
+            merged_seeds.append(new_entry)
+            continue
+        idx = by_seed_idx[seed]
+        old = dict(merged_seeds[idx])
+        old_cells = list(old.get("cells", []))
+        new_cells_by_label = {c["label"]: c for c in new_entry.get("cells", [])}
+        replaced_cells: list[dict[str, Any]] = []
+        for c in old_cells:
+            if c.get("label") in selected_labels and c["label"] in new_cells_by_label:
+                replaced_cells.append(new_cells_by_label[c["label"]])
+            else:
+                replaced_cells.append(c)
+        # Append cells in `new_entry` that didn't exist in the old manifest
+        # (defensive — shouldn't happen in normal flow but covers a
+        # never-before-run cell label being added in a re-run).
+        existing_labels = {c.get("label") for c in old_cells}
+        for label, c in new_cells_by_label.items():
+            if label not in existing_labels:
+                replaced_cells.append(c)
+        old["cells"] = replaced_cells
+        old["n_runs"] = sum(c.get("n_runs", 0) for c in replaced_cells)
+        # Replace the per-cell totals for the cells we re-ran; keep the
+        # others untouched.
+        old_by_cell = dict(old.get("by_cell_totals", {}))
+        new_by_cell = dict(new_entry.get("by_cell_totals", {}))
+        for label in selected_labels:
+            if label in new_by_cell:
+                old_by_cell[label] = new_by_cell[label]
+        old["by_cell_totals"] = old_by_cell
+        old["wall_seconds"] = new_entry.get("wall_seconds", old.get("wall_seconds"))
+        # Sidecar file may or may not have been regenerated. If
+        # `new_entry` lacks `sidecar_file`, keep the old one.
+        if new_entry.get("sidecar_file"):
+            old["sidecar_file"] = new_entry["sidecar_file"]
+        merged_seeds[idx] = old
+
+    merged["seeds"] = merged_seeds
+    merged["n_bundles_total"] = sum(s.get("n_runs", 0) for s in merged_seeds)
+    merged["merged_at"] = merge_ts
+    merged.setdefault("merge_history", []).append(
+        {
+            "ts": merge_ts,
+            "cells": list(selected_labels),
+            "seeds": [s["seed"] for s in new_seeds],
+        }
+    )
+    return merged
+
+
+# ---------------------------------------------------------------------------
 # Single-cell run
 # ---------------------------------------------------------------------------
 
@@ -218,7 +328,11 @@ def _run_one_cell(
     batch_id = f"seed{seed}_{label}_{batch_ts}"
     store = BundleStore(out_dir, batch_id=batch_id)
 
-    forced_planner = ForcedCellPlanner(family=family, strategy=strategy)  # type: ignore[arg-type]
+    forced_planner = ForcedCellPlanner(  # type: ignore[arg-type]
+        family=family,
+        strategy=strategy,
+        success_metric=success_metric,
+    )
     app = build_graph(
         pipeline,
         planner=forced_planner,
@@ -457,6 +571,15 @@ def main() -> None:
         help="Pre-flight: --limit 2 --max-iter 1 --no-ragas --seeds <first only>. "
         "Produces 8 bundles in <90s; verifies the matrix wiring before the full job.",
     )
+    parser.add_argument(
+        "--merge-manifest",
+        action="store_true",
+        help="When re-running a subset of cells, merge the new batch entries "
+        "into the existing experiment_manifest.json instead of overwriting it. "
+        "Also suppresses sidecar regeneration when the re-run's --cells do not "
+        "include the canonical cells (ipi, poiA, qInj), so existing sidecar "
+        "files from the original full run are preserved untouched.",
+    )
     args = parser.parse_args()
 
     if args.smoke:
@@ -550,22 +673,41 @@ def main() -> None:
 
         # Sidecar runs after all cells for this seed have produced their
         # ASR-t verdicts so the planner.update() calls reflect ground truth.
-        print(f"\n--- seed={seed} planner sidecar ---")
-        sidecar = _run_planner_sidecar(seed=seed, queries=queries, cell_records=seed_records)
-        # Sidecar gets its own tiny on-disk artefact alongside the cell
-        # batches so Day 10 doesn't need to re-derive it.
-        sidecar_path = args.out_dir / f"sidecar_seed{seed}_{batch_ts}.json"
-        sidecar_path.write_text(
-            json.dumps(
-                {"seed": seed, "batch_ts": batch_ts, **sidecar},
-                indent=2,
-            ),
-            encoding="utf-8",
+        # Skip when --merge-manifest is set AND the re-run doesn't touch
+        # any canonical sidecar cell: a poiJ-only re-run produces no
+        # signal for the ε-greedy sidecar (the family-feedback table maps
+        # only ipi/poiA/qInj — `_run_planner_sidecar`'s canonical filter),
+        # so the existing sidecar files from the original full run are
+        # the authoritative ones to keep.
+        selected_label_set = {c[0] for c in selected_cells}
+        skip_sidecar = (
+            args.merge_manifest
+            and not (selected_label_set & _CANONICAL_SIDECAR_CELLS)
         )
-        print(
-            f"  -> planner converged toward family={sidecar['convergent_to_family']}, "
-            f"sidecar={sidecar_path.name}"
-        )
+        if skip_sidecar:
+            print(
+                f"\n--- seed={seed} planner sidecar SKIPPED "
+                f"(--merge-manifest with no canonical cells in --cells={','.join(sorted(selected_label_set))}) ---"
+            )
+            sidecar_filename: str | None = None
+        else:
+            print(f"\n--- seed={seed} planner sidecar ---")
+            sidecar = _run_planner_sidecar(seed=seed, queries=queries, cell_records=seed_records)
+            # Sidecar gets its own tiny on-disk artefact alongside the cell
+            # batches so Day 10 doesn't need to re-derive it.
+            sidecar_path = args.out_dir / f"sidecar_seed{seed}_{batch_ts}.json"
+            sidecar_path.write_text(
+                json.dumps(
+                    {"seed": seed, "batch_ts": batch_ts, **sidecar},
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            print(
+                f"  -> planner converged toward family={sidecar['convergent_to_family']}, "
+                f"sidecar={sidecar_path.name}"
+            )
+            sidecar_filename = sidecar_path.name
 
         seed_wall_s = time.perf_counter() - t_seed_start
         # Per-seed roll-up across the cells.
@@ -576,14 +718,19 @@ def main() -> None:
             by_cell_totals[r["cell"]]["asr_t"] += int(r["asr_target"])
             by_cell_totals[r["cell"]]["asr_deny"] += int(r["asr_deny"])
             by_cell_totals[r["cell"]]["n"] += 1
-        manifest_seeds.append({
+        seed_entry: dict[str, Any] = {
             "seed": seed,
             "wall_seconds": round(seed_wall_s, 2),
             "n_runs": len(seed_records),
             "cells": cells_in_seed,
             "by_cell_totals": dict(by_cell_totals),
-            "sidecar_file": sidecar_path.name,
-        })
+        }
+        # Only record `sidecar_file` when we actually wrote one; the
+        # manifest merge keeps the existing seed entry's `sidecar_file`
+        # untouched when this field is absent from the new entry.
+        if sidecar_filename is not None:
+            seed_entry["sidecar_file"] = sidecar_filename
+        manifest_seeds.append(seed_entry)
 
     t_total_s = time.perf_counter() - t_total_start
 
@@ -612,7 +759,25 @@ def main() -> None:
         ],
     }
     manifest_path = args.out_dir / "experiment_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    if args.merge_manifest and manifest_path.exists():
+        # Surgical re-run: fold this invocation's seed entries into the
+        # prior full manifest rather than clobbering it. Preserves the
+        # untouched cells' batch references, the original `manifest_version`
+        # and `cell_registry`, and the sidecar pointers for cells we
+        # didn't re-run.
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        merged = _merge_manifest_in_place(
+            existing=existing,
+            new_seeds=manifest_seeds,
+            selected_labels=[c[0] for c in selected_cells],
+            merge_ts=batch_ts,
+        )
+        manifest_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+        # Recompute the print-out totals from the merged document so the
+        # final summary line reflects the union, not just this re-run.
+        manifest = merged
+    else:
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     print(f"\n{'=' * 72}")
     print(

@@ -1131,3 +1131,208 @@ A second observation specific to DuckDB: **explicit column schemas double as a f
 
 `feat(dashboard): build B — aggregate, dark mode, DuckDB` plus the Tier-1 and Tier-4 polish items folded into the same commit (Aggregate page + DuckDB + dark mode + filter pills + Faithfulness overlay + per-cell summary + verdict legend + empty state + deterministic sort). Documentation writes (DIAGRAMS.md §8.5/§8.6, LAB_NOTEBOOK.md Day 15, README + dashboard/README dashboard sections, requirements.{in,txt} duckdb pin) are folded in as usual; the user reviews before committing.
 
+---
+
+## 2026-05-20 — Day 16 (Jamming early-exit bug + per-objective attribution)
+
+### What
+
+The `poiJ` cell's headline `ASR-deny` was reported as 0% in the Day-9
+results, presented in Chapter 6 §6.5 as an "honest negative result" —
+the framework's jamming attack does not coerce refusal under the
+project's prompt template. A spot-inspection of a single `poiJ`
+bundle (`test2985`) surfaced the actual cause: the run's
+`iteration_history` showed `asr_deny=True` at iteration 0 (template
+path), then `asr_deny=False, asr_target=True` at iteration 1 (LLM
+exploit-generator path), then again at iteration 2. The orchestration
+loop had not early-exited on the iter-0 availability win; it had
+continued into iter 1+ where the LLM exploit generator — told the
+previous attempt "failed" because verdict was `partial` rather than
+`success` — silently switched attack mode to answer-replacement and
+overwrote the bundle's evaluation block.
+
+The fault was in `should_continue` ([src/redteam/orchestration/graph.py:515-524](src/redteam/orchestration/graph.py#L515-L524)). The exit
+predicate keyed only on `verdict == "success"`, and `verdict` was
+derived from `asr_target` alone. For the three integrity cells this
+aligned with the cell's success metric; for the availability cell
+(success metric `asr_deny`) it did not. The bug therefore both
+**under-reported ASR-deny** (0% reported vs. ~46% actual on
+re-measurement) and **over-reported ASR-t** (72% vs. 34%), the second
+of which was the more dangerous error because it presented as a
+plausible "jamming collapses into weak answer-replacement" narrative
+that survived first-pass review.
+
+### Evidence (pre-fix forensic scan)
+
+Scanned the `iteration_history` of all 150 pre-fix `poiJ` bundles:
+
+- **69 / 150 runs** reached `asr_deny=True` on some iteration but
+  retained it at exit on **0 / 150**.
+- Of those 69 runs:
+  - **51** flipped to `asr_target=True` at iter ≥ 1 — silent
+    integrity attribution, the source of the inflated 72% ASR-t
+    headline.
+  - **18** ended in `verdict=partial` with both `asr_target=False`
+    and `asr_deny=False` — legitimate availability wins lost outright.
+- Identical iteration-history scan against the other three cells:
+  zero runs where the cell's success metric flipped from True → False
+  across the loop (because for those cells the predicate's
+  `asr_target` check matched the success metric). The bug was
+  cell-specific to `poiJ`.
+
+### Fix
+
+Threaded the cell's `success_metric` from
+[scripts/06_run_experiments.py:132-137](scripts/06_run_experiments.py#L132-L137)'s `CELLS` registry into
+state and let `should_continue` consult it:
+
+- `ForcedCellPlanner` gained a `success_metric: str = "asr_target"`
+  default so the protocol-conformant ε-greedy and round-robin
+  planners (which don't set the field) are unchanged.
+- `make_plan_node` reads `getattr(planner, "success_metric", None)`
+  the same way it already reads `strategy`, and emits the value into
+  state when present.
+- `RedTeamState` (a `TypedDict(total=False)`) gained the field.
+- `should_continue` now reads `metric = state.get("success_metric",
+  "asr_target")` and exits when `state[metric]` is truthy.
+
+Plus a `--merge-manifest` flag on the experiment driver so a
+surgical `--cells poiJ` re-run could be folded into the existing
+`experiment_manifest.json` without overwriting the other 450 runs'
+manifest entries or regenerating the planner sidecars (whose
+canonical-cell filter excludes `poiJ` anyway).
+
+Eight new unit tests in
+[tests/test_orchestration.py](tests/test_orchestration.py) pin the
+predicate's behaviour across (a) the legacy default path with no
+`success_metric` in state, (b) jamming-cell exit on `asr_deny=True`,
+(c) jamming-cell does *not* exit on `asr_target=True`, (d) max-iter
+exhaustion, plus the planner→state plumbing.
+
+### Verification
+
+- Smoke (`--smoke --cells poiJ`): 2 bundles, < 1 second, no
+  exceptions, `iters=1` reported.
+- Production re-run (`--cells poiJ --merge-manifest`): user-executed
+  in their own terminal; 3 new batches at
+  `results/runs/batch_seed*_poiJ_20260519T205329Z/`, 50 bundles each.
+- Post-fix headline: poiJ ASR-deny = **0.46** [0.39, 0.54]; ASR-t =
+  **0.34**; all three seeds returned exactly 23/50 ASR-deny (the
+  iter-0 template payload is deterministic per query).
+
+### Per-objective attribution downstream
+
+Once the bug was fixed, a follow-up observation surfaced: pooling
+`poiA` and `poiJ` into a single `corpus_poisoning` family rollup
+(which the dashboard's `summary_by_family_channel` did) drags the
+family ASR-t headline from 80% (poiA alone) to 57% (poiA + poiJ
+pooled), because the poiJ runs' ASR-t = 34% is a *different
+measurement* (the LLM happened to emit a target span instead of
+refusing) rather than a fair integrity-success rate.
+
+The dashboard's data layer now does **per-objective attribution**:
+a `CELL_REGISTRY` table maps each `(family, strategy)` to its cell
+label, objective, and success metric; `kpi_asr_target_integrity` and
+`kpi_asr_deny_availability` filter to runs whose cell objective
+matches before computing the headline mean; `summary_by_cell`
+groups on `(family, channel, strategy)` so poiA and poiJ appear as
+separate rows; the Overview page's four tiles became `Total runs ·
+ASR-t (integrity) · ASR-deny (availability) · Integrity-degraded`.
+Five new dashboard smoke tests pin the attribution. The notebook's
+analysis module (`redteam.analysis.stats.summary_by_cell`) already
+did this correctly per the manifest-aware design — the dashboard
+caught up.
+
+### What needed to change downstream
+
+- `results/figures/{asr_deny_by_cell, asr_triple_by_cell,
+  channel_objective_heatmap, ragas_triple_clean_vs_attacked,
+  rank_shift_ecdf}` — regenerated via `python scripts/08_make_plots.py`.
+- New **F8** added (`poij_outcome_decomposition`) — one horizontal
+  stacked bar showing the four (asr_deny × asr_target) outcomes for
+  the 150 poiJ runs (refused 46% · target hit 34% · other answer
+  20% · refused+target 0%). Closes the "what happened on the other
+  54%?" question that F4 alone leaves unanswered.
+- `results/tables/*.csv` and `results/summary.json` regenerated.
+- `notebooks/03_results_analysis.ipynb` re-executed; five markdown
+  narrative cells edited to reflect the new numbers (the
+  "Headline numbers" list, Reading F1, the §6 F4 header, Reading
+  F4, and the per-seed cross-tab interpretation), and a new
+  three-cell F8 trio inserted after Reading F4.
+- `docs/RESULTS.md` §6.3, §6.5 (substantively rewritten —
+  "honest negative result" → "jamming as a coerced refusal"; new
+  §6.5.1 methodology note documenting the bug + fix), §6.6
+  (poiJ AR/Faithfulness numbers refreshed), §6.7 (rank-shift mean
+  refreshed), §6.9 (Cohen's h drops from -2.74 "huge" to -1.25
+  "large" under the corrected headline metric).
+- `README.md` — Headline-results table added; Overview-tile
+  description updated to describe per-objective attribution; the
+  "Figures F1–F7" reference bumped to F1–F8.
+
+### Problems faced and resolutions
+
+- *Streamlit didn't pick up the new `kpi_asr_deny_availability`
+  symbol after the dashboard data-layer edit.* The running server
+  process had a stale module cache; `Ctrl+C` and re-launching the
+  Streamlit server resolved it without any further code changes.
+- *The forensic-scan-then-recover question.* Before the re-run, the
+  iteration_history scan could in principle have recovered each
+  pre-fix run's "true" `asr_deny` from the iter-0 evaluation block
+  in history, avoiding the 25-minute API spend of a re-run. Decided
+  against because the iter-0 RAGAS scores in `iteration_history`
+  are truncated by design (only `verdict` and `generator_output[:500]`
+  are kept per iteration in `evaluate_node`'s history-append block,
+  not the RAGAS triple), so the rest of Chapter 6 — F5 in particular
+  — would still need the bundle's evaluation block to carry the
+  iter-0 outputs. Cleaner to re-run.
+
+### Key observation
+
+**The bug was load-bearing on a Chapter 7 discussion thesis.** The
+pre-fix Chapter 6 §6.5 read as "jamming did not land — temperature-0
+RAGs with answer-from-context instructions are hard to coerce into
+refusal", and Chapter 7 §7.3 built on that to argue that availability
+attacks require harder families (retrieval-flooding,
+context-overflow). The post-fix data inverts that: the project's
+jamming payload *does* land on 46% of queries, so the Chapter 7
+narrative now has to acknowledge a working availability attack and
+discuss why the rate is 46% rather than 90% (a more interesting
+question than "why did it fail entirely?"). FUTURE_WORKS §3's
+deferred-attack-families entry is no longer motivated by a flat
+negative result and needs amending — flagged but not edited in this
+change.
+
+A second observation: **all three seeds returned exactly 23/50
+ASR-deny**. The iter-0 template path is `generate_poison_payload(
+query, target_answer, strategy="jamming", seed=seed)` — although the
+function takes `seed`, the jamming-strategy code-path constructs the
+payload from the query string alone (no randomness needed for the
+jamming template). The 23/50 cross-seed determinism is therefore an
+expected property, not a coincidence. Surfacing it visibly on the
+notebook cross-tab is a small but real reproducibility win.
+
+### What's next
+
+- *Today / tomorrow:* rewrite Chapter 7 §7.3 prose to reflect the
+  working availability attack. The numbers and figures are now
+  correct; the interpretive prose is the remaining writing task.
+- *FUTURE_WORKS.md §3 amendment:* downgrade the "availability attacks
+  don't land under our prompt template" entry from a negative result
+  to "the jamming template lands on 46%; harder attack families
+  (retrieval-flooding, context-overflow) are motivated by the cap on
+  this rate rather than by an outright failure".
+- *Optional: iteration-budget panel.* The fix saves ~46% of poiJ's
+  compute budget (`mean_iterations_used` drops from 3 to 2.08).
+  Worth one small figure if the dissertation has room — declined
+  for this pass to keep the figure inventory at F1–F8.
+
+### Commit
+
+`fix(orchestration): honour cell-specific success metric in
+should_continue + per-objective dashboard attribution + F8`. Folds
+the graph.py / state.py / experiment-driver edits, the dashboard
+data-layer refactor, the new F8 plotter, the regenerated
+figures/tables, the notebook narrative updates, and the RESULTS.md /
+README.md / LAB_NOTEBOOK.md prose updates into a single commit; the
+user reviews before committing.
+

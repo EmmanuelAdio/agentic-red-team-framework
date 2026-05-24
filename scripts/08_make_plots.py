@@ -19,7 +19,8 @@ Workflow
    (per-cell, per-cell RAGAS, paired-vs-IPI, baseline-summary).
 4. Write the tables as CSV + a flat ``results/summary.json``.
 5. Lazily read the per-rank bundle DataFrame for F3 then call
-   :func:`make_all_plots` to produce 7 PDFs + 7 PNGs.
+   :func:`make_all_plots` to produce 8 PDFs + 8 PNGs (F1-F8; F8 is the
+   Day-10 poiJ outcome decomposition added alongside the early-exit fix).
 
 CLI
 ---
@@ -138,13 +139,13 @@ def main() -> None:
     print(f"[plotter] writing summary JSON to {args.summary_path} ...")
     write_summary_json(tables, args.summary_path)
 
-    # 5. Per-rank bundle reader for F3, then all 7 figures.
+    # 5. Per-rank bundle reader for F3, then all 8 figures (F1-F8).
     print("[plotter] reading per-rank bundle rows for F3 (ASR-r vs k) ...")
     bundles = load_bundles_for_k_curve(args.runs_dir)
     print(f"          loaded {len(bundles)} per-rank rows across "
           f"{bundles['cell'].nunique() if not bundles.empty else 0} corpus-channel cells.")
 
-    print(f"[plotter] rendering 7 figures to {args.figures_dir} ...")
+    print(f"[plotter] rendering 8 figures to {args.figures_dir} ...")
     paths = make_all_plots(
         data, baseline,
         summary_table=tables["summary_by_cell"],

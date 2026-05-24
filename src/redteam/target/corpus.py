@@ -2,7 +2,7 @@
 
 Stratified 1k-doc sample of NQ (Natural Questions) from BEIR (Benchmarking-IR):
 gold docs for `n_queries` test queries are guaranteed in the slice; the remainder
-is filled by uniform random sampling. This is what makes Day 9's experiment matrix
+is filled by uniform random sampling. This is what makes the experiment matrix
 (50 queries answerable from corpus) feasible.
 """
 

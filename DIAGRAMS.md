@@ -1039,8 +1039,13 @@ status note:
       grouped by `(attack_family, attack_channel)`, and the
       recent-runs table — implemented in [dashboard/Home.py](dashboard/Home.py).
 - [x] Clicking a row navigates to Run Detail with the correct
-      `run_id` (Streamlit `column_config.LinkColumn` with
-      `url=lambda r: f"./run_detail?run_id={r}"`).
+      `run_id`. Streamlit 1.36+ removed `LinkColumn(url=callable)`,
+      so the column holds the synthesised
+      `./run_detail?run_id=<id>` URL and `display_text=r"run_id=(.+)$"`
+      extracts the visible id back out via the regex capture group.
+      Streamlit hard-codes `target="_blank"` on `LinkColumn`, so each
+      click opens in a new tab — the trade-off is documented in
+      §8.8 below and tracked in `FUTURE_WORKS.md` §1.4.
 - [x] Run Detail renders configuration, retrieved docs (poisoned
       highlighted with `attack.payload` as body text), generator
       output, evaluation card, and one working button
@@ -1052,9 +1057,12 @@ status note:
 - [x] No functionality regression in `scripts/08_make_plots.py` — the
       matplotlib path is unchanged by this work.
 - [x] Smoke test passes (`pytest tests/test_dashboard_smoke.py`):
-      five tests covering imports + `badge` verdict inversion +
-      `score_bar` None-handling + `doc_card` poisoned-class + edge
-      cases of `bootstrap_ci`.
+      eleven tests covering imports + `badge` verdict inversion +
+      `score_bar` None-handling + `doc_card` poisoned-class +
+      `doc_card` baseline-top-1 highlight (Day-15.5) + edge cases of
+      `bootstrap_ci` + filter round-trip + verdict-legend classes +
+      empty-state rendering + faithfulness-overlay-histogram shape +
+      DuckDB SELECT-42 round-trip.
 
 ### 8.5 Build-A cuts — current status
 
@@ -1065,20 +1073,24 @@ post-viva Build-C work.
 
 | Item | Status | Provenance |
 | --- | --- | --- |
-| *Aggregate page* — cell-aware per-condition view | **Implemented (Day 15)** | [dashboard/pages/01_aggregate.py](dashboard/pages/01_aggregate.py) — reuses `redteam.analysis.loaders.load_experiment`, `summary_by_cell`, `ragas_by_cell`, `paired_differences_vs_ipi`; new chart factories `ragas_violins` + `rank_shift_ecdf` in [src/redteam/dashboard/charts.py](src/redteam/dashboard/charts.py) |
-| *Dark mode* — env-var gated palette switch | **Implemented (Day 15)** | `REDTEAM_DASHBOARD_THEME=dark` → `inject_css(theme="dark")` + `dark_layout(fig)` Plotly helper; details in §8.7 below |
+| *Aggregate page* — cell-aware per-condition view | **Implemented (Day 15) → Folded into Overview (Day 15.5)** | Originally shipped as `dashboard/pages/01_aggregate.py`; the three tables (`summary_by_cell`, `ragas_by_cell`, `paired_differences_vs_ipi`) were folded into [dashboard/Home.py](dashboard/Home.py) directly under the family×channel summary, each with a column-reference expander. The split-violin and `rank_shift@k` ECDF charts were not migrated — the static figure stack under `results/figures/` covers the same information. See §8.8 below for details. |
+| *Dark mode* — env-var gated palette switch | **Implemented (Day 15) + config-card fix (Day 15.5)** | `REDTEAM_DASHBOARD_THEME=dark` → `inject_css(theme="dark")` + `dark_layout(fig)` Plotly helper; details in §8.6 above. The Run Detail Configuration card had a hard-coded white background that was replaced by a themeable `.config-card` class in Day 15.5 (§8.8). |
 | *DuckDB query layer* — opt-in SQL backend | **Implemented (Day 15)** | `REDTEAM_DASHBOARD_DUCKDB=1` → `redteam.dashboard.duck.load_bundles_via_duck` |
 | *Filter pills* — `st.pills` for family/channel/payload/verdict | **Implemented (Day 15)** | Sidebar pills (multi-select fallback for Streamlit < 1.36) via `_pill_or_multiselect` + [src/redteam/dashboard/filters.py](src/redteam/dashboard/filters.py) |
 | *Faithfulness overlay histogram* | **Implemented (Day 15)** | `charts.faithfulness_overlay_hist(attacked, clean)` on the Overview, two-column row beside the ASR-t bars |
-| *Per-cell summary table on Overview* | **Implemented (Day 15)** | `data.summary_by_family_channel(df)` rendered under the chart row |
+| *Per-cell summary table on Overview* | **Implemented (Day 15) + percent-format fix (Day 15.5)** | `data.summary_by_family_channel(df)` rendered under the chart row. The Day-15.5 polish pass added `_pct_for_display(df, cols)` to scale `[0, 1]` proportions into `[0, 100]` so `format="%.0f%%"` renders e.g. `0.83 → "83 %"` instead of `"1 %"` (Streamlit's printf formatter does not multiply by 100). See §8.8. |
+| *Per-cell summary (manifest-aware) on Overview* | **Implemented (Day 15.5)** | `summary_by_cell`, `ragas_by_cell`, `paired_differences_vs_ipi` from `redteam.analysis.stats`, surfaced on Home via `_load_experiment_tables(selected_seeds)` with a `FileNotFoundError` fallback for dry-run-only bundle trees. Each table has a *"Column reference"* expander written in plain prose. |
+| *Baseline-top-1 highlight* on Run Detail retrieved docs | **Implemented (Day 15.5)** | `components.doc_card` gained `is_baseline_top1` + `baseline_rank_shift` kwargs; new `.baseline-top1` CSS class (calm blue in light, navy in dark); Run Detail matches each retrieved doc against `execution.baseline_top1_doc_id` and renders a *"baseline top-1 · Δ +N"* chip. If the doc fell out of top-k entirely, an inline notice surfaces the `rank_shift@k = k` saturating-max sentinel. |
 | *Verdict-legend chip strip* | **Implemented (Day 15)** | `components.verdict_legend()` rendered under the metric tiles; explains the bundle-literal-to-visual inversion |
 | *Empty-state on Run Detail* | **Implemented (Day 15)** | `components.empty_state(reason, detail, back_href)` replaces bare `st.error + st.stop` |
 | *Deterministic recent-runs sort* | **Implemented (Day 15)** | `data.load_bundles` sorts by `(timestamp DESC, run_id ASC)` so Day-9 bundles sharing a minute-granularity timestamp render in stable order across reloads |
+| *Launcher hygiene* — `.env` re-source + `-Restart` flag | **Implemented (Day 15.5)** | [scripts/09_run_dashboard.ps1](scripts/09_run_dashboard.ps1) + [scripts/09_run_dashboard.sh](scripts/09_run_dashboard.sh) both call `python-dotenv` on every invocation, accept `-Restart` / `--restart` to free `$STREAMLIT_PORT` before launching, and unset stale `STREAMLIT_THEME_*` env vars so flipping `REDTEAM_DASHBOARD_THEME` from `dark` back to `light` actually re-lights the native chrome. |
 | *Comparison views* — pin two runs, diff configs/outputs | *Deferred → Build C* | Three-pane Run Detail with side-by-side rendering |
 | *Custom fonts* — Inter + JetBrains Mono | *Deferred → Build C* | `@import url(...)` from Google Fonts |
 | *Loughborough purple* on active sidebar item | *Deferred → Build C* | Opt-in via env var |
 | *ZIP-export-the-bundle* button on Run Detail | *Deferred → Build C* | For sharing reproducible failures |
-| *Re-run-with-different-seed* button on Run Detail | *Deferred → Build C* | Currently a `st.toast` stub |
+| *Re-run with different seed / config* on Run Detail | *Deferred → `FUTURE_WORKS.md` §1.4* | Currently a `st.toast` stub. Scope grew during Day 15.5 to also cover `attack_channel` / `payload_source` knobs (companion to `FUTURE_WORKS.md` §2.8). |
+| *Same-tab nav from Recent runs* | *Deferred → `FUTURE_WORKS.md` §1.4* | Streamlit `LinkColumn` hard-codes `target="_blank"`; the row-select + `st.switch_page` alternative was prototyped and reverted because the click-affordance moves to a small selection circle the reviewer is unlikely to discover. See §8.8 for the trade-off. |
 | *Sidebar collapse memory* across page navigations | *Deferred → Build C* | Streamlit session-state cookie |
 | *Mobile-responsive layout* | *Deferred → Build C* | Outside dissertation scope |
 | *Clean-doc chunk lookup* against `data/corpus/` | *Deferred → Build C* | Body text for co-retrieved clean docs |
@@ -1190,4 +1202,139 @@ lives in the ad-hoc verification block, not in the smoke suite).
   asymmetry within a single family visible at a glance — useful as
   a worked-example anecdote in the Discussion's Discussion of F2.
 - *Chapter 8 (Future Work) / `FUTURE_WORKS.md`*: §8.5 above feeds
-  directly into the post-submission Build-B work item.
+  directly into the post-submission Build-B work item. The Day-15.5
+  polish pass (§8.8) added two further entries: `FUTURE_WORKS.md`
+  §1.4 (*Interactive experimentation from the dashboard*) and §2.8
+  (*Balanced `(channel × payload_source)` experiment matrix*).
+
+### 8.8 Day-15.5 polish pass
+
+After the Build-A / early-Build-B work landed, a follow-up pass
+addressed a handful of usability defects surfaced by mid-week
+end-to-end testing. The changes are read-only from the framework's
+perspective (no agent-loop state changes) and uniformly trade Build-C
+items for *correctness of the existing surface*.
+
+**1. Percent-format bug on every dashboard rate column.**
+Streamlit's `column_config.NumberColumn(format="%.0f%%")` is a
+printf-style formatter — it does *not* multiply by 100. The
+`summary_by_family_channel` helper (and the analysis-module
+`summary_by_cell` / `ragas_by_cell` / `paired_differences_vs_ipi`)
+all return rates as proportions in `[0, 1]`. So a 96 % ASR-t was
+rendering as `"1 %"` (printf(0.96, "%.0f") → `"1"`, then literal `%`
+appended). The fix in [dashboard/Home.py](dashboard/Home.py) adds
+`_pct_for_display(df, cols)` — a tiny copy-and-scale helper that
+multiplies the named columns by 100 before passing the frame to
+`st.dataframe`. The underlying analysis tables stay on the
+`[0, 1]` proportion scale; only the display copy is rescaled, so
+the reproducibility-of-the-CSV story in §8.3 is preserved.
+
+**2. Aggregate page consolidation.** The Day-15 Aggregate page
+(`dashboard/pages/01_aggregate.py`) was retired and its three
+tables — `summary_by_cell`, `ragas_by_cell`,
+`paired_differences_vs_ipi` — folded into the Overview directly
+under the family×channel summary, each gated behind an
+`_load_experiment_tables(selected_seeds)` cache and rendered only
+when `results/runs/experiment_manifest.json` is present (so the
+page still works on dry-run-only bundle trees). Each table has a
+*"Column reference — what each column means"* expander written in
+plain prose, designed to read as a dissertation glossary rather
+than as terse table headers; the *Paired differences vs IPI* table
+additionally gets a two-line motivation paragraph above it
+explaining why the pairing matters. The split-violin RAGAS chart
+and the `rank_shift@k` ECDF were not migrated — the matplotlib
+figure stack under `results/figures/` already covers the same
+ground for the dissertation, and the duplication was a Build-B
+hangover.
+
+**3. Baseline-top-1 highlight on Run Detail.** The rank_shift@k
+metric encodes "fell out of top-k" as the saturating value `k` —
+but the dashboard previously gave the reader no visual cue at all
+for *where* the baseline's top-1 doc had moved to under attack.
+`components.doc_card` now accepts two optional kwargs
+(`is_baseline_top1`, `baseline_rank_shift`) and a matched
+`.baseline-top1` CSS class lights the matching card with a calm
+blue border + a *"baseline top-1 · Δ +N"* chip (informational, not
+alarming — the poisoned-red styling still takes precedence if both
+flags collide). Run Detail matches each retrieved doc against
+`execution.baseline_top1_doc_id`; if none match, an inline notice
+surfaces the saturating-max sentinel explicitly ("*The clean-baseline
+top-1 doc `<id>` is not in this attacked top-k retrieval —
+rank_shift@k = k, interpret as 'fell out of top-k entirely'*").
+The change is covered by a new
+`test_doc_card_marks_baseline_top1` smoke test that guards against
+silent regressions of the chip.
+
+**4. Configuration-card dark-mode fix.** The Run Detail
+*Configuration* card was wrapped in an inline
+`<div style="background:#FFFFFF; border: 0.5px solid #E5E4DC">`
+that ignored the `--bg-surface` / `--border` CSS variables driving
+dark mode — so it stayed white-on-light when everything around it
+went dark. Replaced with a themeable `.config-card` class in
+[src/redteam/dashboard/_css.py](src/redteam/dashboard/_css.py),
+with a single-line dark-mode override that re-binds the same
+variables. No layout change.
+
+**5. Launcher hygiene.** Three independent issues in
+[scripts/09_run_dashboard.ps1](scripts/09_run_dashboard.ps1) +
+[scripts/09_run_dashboard.sh](scripts/09_run_dashboard.sh):
+
+- *`.env` was loaded once at shell startup, never refreshed.*
+  Editing `.env` and re-launching did nothing because the shell's
+  environment already carried the old values. The launcher now
+  calls `python-dotenv` on every invocation (via a small Python
+  one-liner that emits JSON in PowerShell and `export KEY=…` lines
+  in bash) and skips empty values so a shell-level override set
+  immediately before launch is preserved.
+- *No way to free the port without manually hunting the PID.*
+  Added `-Restart` (PowerShell) / `--restart` (bash) that
+  enumerates listeners on `$STREAMLIT_PORT` (via
+  `Get-NetTCPConnection` / `lsof` / `fuser` / `ss`, in that fallback
+  order) and SIGTERM-then-SIGKILLs them before launching. This is
+  the standard "I edited `.env`, give me a fresh process" workflow.
+- *`STREAMLIT_THEME_*` env vars leaked across invocations.* The
+  launcher used to *export* the dark-mode `STREAMLIT_THEME_*`
+  variables when `REDTEAM_DASHBOARD_THEME=dark` but never *unset*
+  them. So once a session had run in dark mode, every subsequent
+  light-mode launch in the same shell still rendered the native
+  Streamlit chrome dark, because the env vars overrode
+  `dashboard/.streamlit/config.toml`. The fix unsets the five
+  `STREAMLIT_THEME_*` keys at the start of the theme block and
+  re-exports them only when dark is explicitly requested.
+
+**6. Recent-runs navigation trade-off.** The original Recent-runs
+table on the Overview used `st.column_config.LinkColumn` to make
+the `run_id` column clickable. Streamlit hard-codes
+`target="_blank"` on `LinkColumn` and exposes no override, so
+every click opens in a new tab — friction during dissertation /
+viva walk-throughs. A row-selection + `st.switch_page` alternative
+was prototyped (`on_select="rerun"`, `selection_mode="single-row"`,
+`st.query_params["run_id"] = …`, then `st.switch_page("pages/02_run_detail.py")`)
+and reverted, because once `on_select` is enabled with
+`hide_index=True` the click affordance moves to a small
+selection circle at the start of each row — the `run_id` text
+itself is no longer interactive, so a reviewer's first click
+appears to do nothing. The revert keeps the new-tab UX in
+exchange for one-click discoverability; a two-step
+*select-row → click-Open-button* pattern is logged in
+`FUTURE_WORKS.md` §1.4 alongside the broader interactive
+re-run / re-config surface.
+
+**7. FUTURE_WORKS additions.** Two new entries land in
+`FUTURE_WORKS.md`: §1.4 (*Interactive experimentation from the
+dashboard*) describing the Run-Detail re-run form + Home-page
+"Run experiment" panel + same-tab navigation, and §2.8
+(*Balanced `(channel × payload_source)` experiment matrix*)
+recording the unbalanced split visible in the Day-9 matrix
+(IPI 144 template / 6 LLM; query injection 141 / 9; corpus
+poisoning AR 3 / 147; jamming 150 / 0) together with the
+metric-side caveat that the LLM-source ASR-t = 0 % result for
+IPI is partly a marker-preservation artefact and would need
+LLM-judge ASR-a (§5.2) before a clean comparison is possible.
+
+**Smoke-test count.** The Day-15.5 work brings the
+`tests/test_dashboard_smoke.py` suite from ten to eleven tests
+(the new addition is `test_doc_card_marks_baseline_top1`). The
+suite continues to exercise only the importable helpers in
+`src/redteam/dashboard/`; the Streamlit entry points remain
+manually verified.

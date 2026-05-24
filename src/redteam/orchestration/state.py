@@ -62,6 +62,14 @@ class RedTeamState(TypedDict, total=False):
     attack_strategy: str  # e.g. "instruction_override", "answer_replacement"
     iteration: int
     max_iterations: int
+    # Day-10 fix: name of the state-boolean field whose truthiness terminates
+    # the loop early. Defaults to `"asr_target"` (integrity) when absent —
+    # `ForcedCellPlanner` sets it to `"asr_deny"` for the jamming cell so
+    # availability wins early-exit instead of being overwritten by the
+    # iteration-1+ LLM exploit generator. Stored alongside the planner
+    # output so the bundle JSON records *which* metric drove the exit and
+    # any reviewer can audit the loop's termination condition.
+    success_metric: str
 
     # --- exploit-generator output ------------------------------------------
     payload: str  # adversarial doc body for corpus attacks; modified query for query attacks

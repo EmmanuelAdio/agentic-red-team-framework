@@ -65,25 +65,45 @@ def dark_layout(fig: go.Figure) -> go.Figure:
 # in the verdict chips). Keeping these literal instead of CSS-var means
 # the chart matches whether or not the inline stylesheet has loaded.
 _PALETTE = {
-    "asr_t":  "#E24B4A",  # red — end-to-end attack success
-    "asr_a":  "#EF9F27",  # amber — answer-only success
-    "asr_r":  "#EF9F27",
+    "asr_t":    "#E24B4A",  # red — end-to-end attack success
+    "asr_a":    "#EF9F27",  # amber — answer-only success
+    "asr_r":    "#EF9F27",
     "asr_deny": "#0C447C",
+    # Day-10 per-cell mode: each bar reads its own success-metric column
+    # so we pick a neutral red shared with asr_t — the bar labels and
+    # subtitle disambiguate which metric a given bar represents.
+    "headline": "#E24B4A",
 }
 
 
 def asr_bar_chart(
     df: pd.DataFrame,
-    metric: str = "asr_t",
+    metric: str = "headline",
     *,
     min_group_size: int = 2,
 ) -> go.Figure:
-    """Horizontal bars of mean ``metric`` by ``(attack_family, attack_channel)``.
+    """Horizontal bars of mean ``metric`` per attack cell.
+
+    Two modes:
+
+    * ``metric="headline"`` (default, post-Day-10) — joins the input
+      frame against ``CELL_REGISTRY`` via :func:`_classify`, groups on
+      the dissertation cell label, and reads each row's own
+      cell-specific success metric (``asr_t`` for integrity cells,
+      ``asr_deny`` for ``poiJ``, ``asr_a`` for ``qInj``). This is the
+      mode the Overview page uses so a single chart cleanly reports a
+      "headline success" value across cells with different objectives.
+
+    * Any other ``metric`` name (e.g. ``"asr_t"``, ``"asr_a"``,
+      ``"asr_deny"``) — legacy behaviour: groups on
+      ``(attack_family, attack_channel)`` and reads ``df[metric]``
+      directly. Kept so any caller asking for a specific ASR metric
+      across all cells still works.
 
     Whiskers come from :func:`bootstrap_ci`. Groups smaller than
     ``min_group_size`` render the mean with no whisker.
     """
-    if df.empty or metric not in df.columns:
+    if df.empty:
         fig = go.Figure()
         fig.update_layout(
             margin=dict(l=20, r=20, t=10, b=20),
@@ -100,18 +120,67 @@ def asr_bar_chart(
         return fig
 
     rows: list[dict] = []
-    grouped = df.groupby(["attack_family", "attack_channel"], dropna=False)
-    for (fam, chan), grp in grouped:
-        vals = grp[metric].astype(float).values
-        mean, lo, hi = bootstrap_ci(vals)
-        rows.append({
-            "label": f"{fam} · {chan}",
-            "mean": mean,
-            "lo": lo,
-            "hi": hi,
-            "n": len(grp),
-            "show_ci": len(grp) >= min_group_size,
-        })
+    if metric == "headline":
+        # Per-cell headline mode: each cell's bar reads its own
+        # success-metric column. Rows whose (family, strategy) pair is
+        # not in CELL_REGISTRY are skipped entirely — they have no
+        # registered success metric, so plotting them on the same axis
+        # would be misleading.
+        from redteam.dashboard.data import _classify  # local import to avoid cycles
+
+        classified = _classify(df)
+        grouped = classified.dropna(subset=["cell_label"]).groupby(
+            ["cell_label", "attack_family", "attack_channel", "success_metric"],
+            dropna=False,
+        )
+        for (cell_label, fam, chan, success_metric), grp in grouped:
+            col = success_metric
+            if col not in grp.columns:
+                continue
+            vals = grp[col].dropna().astype(float).values
+            if vals.size == 0:
+                continue
+            mean, lo, hi = bootstrap_ci(vals)
+            # Bar label shows the cell shortcode and which metric is
+            # being read so a reader can never be confused about
+            # whether a poiJ bar represents ASR-t or ASR-deny.
+            label = f"{cell_label} ({col})  ·  {fam} · {chan}"
+            rows.append({
+                "label": label,
+                "mean": mean,
+                "lo": lo,
+                "hi": hi,
+                "n": len(grp),
+                "show_ci": len(grp) >= min_group_size,
+            })
+    else:
+        if metric not in df.columns:
+            fig = go.Figure()
+            fig.update_layout(
+                margin=dict(l=20, r=20, t=10, b=20),
+                height=240,
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                annotations=[dict(
+                    x=0.5, y=0.5, xref="paper", yref="paper",
+                    text=f"Column {metric!r} not in dataframe",
+                    showarrow=False,
+                    font=dict(family="JetBrains Mono, monospace", size=12, color="#888780"),
+                )],
+            )
+            return fig
+        grouped = df.groupby(["attack_family", "attack_channel"], dropna=False)
+        for (fam, chan), grp in grouped:
+            vals = grp[metric].astype(float).values
+            mean, lo, hi = bootstrap_ci(vals)
+            rows.append({
+                "label": f"{fam} · {chan}",
+                "mean": mean,
+                "lo": lo,
+                "hi": hi,
+                "n": len(grp),
+                "show_ci": len(grp) >= min_group_size,
+            })
     rows.sort(key=lambda r: (r["mean"] if pd.notna(r["mean"]) else -1))
 
     labels = [r["label"] for r in rows]
@@ -140,7 +209,8 @@ def asr_bar_chart(
             textfont=dict(family="JetBrains Mono, monospace", size=10, color="#5F5E5A"),
             hovertemplate=(
                 "<b>%{y}</b><br>"
-                f"mean {metric}: " + "%{x:.2f}<br>"
+                f"mean {'headline success' if metric == 'headline' else metric}: "
+                + "%{x:.2f}<br>"
                 "<extra></extra>"
             ),
         )

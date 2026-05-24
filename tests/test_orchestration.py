@@ -37,7 +37,13 @@ from redteam.attacks.prompt_injection import (
 )
 from redteam.attacks.query_injection import QueryInjectionPayload
 from redteam.config import CHROMA_DIR, DATA_DIR, EMBEDDING_MODEL, load_env
-from redteam.orchestration.graph import ForcedCellPlanner, build_graph, plan_node
+from redteam.orchestration.graph import (
+    ForcedCellPlanner,
+    build_graph,
+    make_plan_node,
+    plan_node,
+    should_continue,
+)
 from redteam.orchestration.state import RedTeamState
 from redteam.target.generator import LLMGenerator
 from redteam.target.pipeline import RAGPipeline
@@ -79,6 +85,147 @@ def test_planner_round_robin() -> None:
     assert out0["payload_source"] == "template"
     assert out1["payload_source"] == "llm"
     assert out2["payload_source"] == "llm"
+
+
+# ---------------------------------------------------------------------------
+# Day 10 — `should_continue` honours the cell's success metric
+# ---------------------------------------------------------------------------
+#
+# These four tests pin the early-exit predicate's behaviour across the
+# Day-10 fix. The pre-fix predicate keyed off `verdict == "success"`
+# which made the jamming cell (whose success is `asr_deny`) never
+# early-exit, leading to the 69-of-150 silent-overwrite anomaly logged
+# in the Day-10 lab note. The predicate now reads `state["success_metric"]`
+# (default `"asr_target"` for backwards-compat) and treats the named
+# boolean as the terminal signal.
+
+
+def test_should_continue_defaults_to_asr_target() -> None:
+    """Backwards-compat: when no ``success_metric`` is present in state,
+    the predicate exits on ``asr_target=True`` exactly like the pre-fix
+    behaviour. Existing ε-greedy / round-robin paths (which never set the
+    metric) are unaffected.
+    """
+    state: RedTeamState = {
+        "iteration": 0,
+        "max_iterations": 3,
+        "asr_target": True,
+        "asr_deny": False,
+        "verdict": "success",
+    }
+    assert should_continue(state) == "end"
+
+
+def test_should_continue_loops_when_no_signal_yet() -> None:
+    """No success fired and budget remains → keep looping."""
+    state: RedTeamState = {
+        "iteration": 1,
+        "max_iterations": 3,
+        "asr_target": False,
+        "asr_deny": False,
+    }
+    assert should_continue(state) == "loop"
+
+
+def test_should_continue_exits_on_asr_deny_for_jamming_cell() -> None:
+    """Day-10 fix: the jamming cell carries ``success_metric="asr_deny"``;
+    ``asr_deny=True`` terminates the loop on iteration 0 instead of
+    continuing into iter 1 where the LLM exploit generator would silently
+    switch attack mode and overwrite the availability win.
+    """
+    state: RedTeamState = {
+        "iteration": 0,
+        "max_iterations": 3,
+        "success_metric": "asr_deny",
+        "asr_target": False,  # jamming doesn't fire ASR-t — the bug was
+                              # that the pre-fix predicate only looked here
+        "asr_deny": True,
+    }
+    assert should_continue(state) == "end"
+
+
+def test_should_continue_jamming_does_not_exit_on_asr_target() -> None:
+    """A jamming-cell run with ``asr_target=True`` but ``asr_deny=False``
+    is NOT a jamming win — it means the iteration-1+ LLM produced an
+    answer-replacement-style payload that happened to land an ASR-t hit.
+    The loop must keep iterating (or hit max_iter) rather than treating
+    that as success for an availability cell.
+    """
+    state: RedTeamState = {
+        "iteration": 1,
+        "max_iterations": 3,
+        "success_metric": "asr_deny",
+        "asr_target": True,
+        "asr_deny": False,
+    }
+    assert should_continue(state) == "loop"
+
+
+def test_should_continue_exits_on_max_iter_regardless_of_metric() -> None:
+    """Budget exhaustion is independent of the success-metric path."""
+    state: RedTeamState = {
+        "iteration": 3,
+        "max_iterations": 3,
+        "success_metric": "asr_deny",
+        "asr_target": False,
+        "asr_deny": False,
+    }
+    assert should_continue(state) == "end"
+
+
+def test_forced_cell_planner_surfaces_success_metric_to_state() -> None:
+    """The ``ForcedCellPlanner.success_metric`` value reaches
+    ``plan_node``'s output dict, which the graph wires into state. This
+    is the seam that lets ``should_continue`` see the metric on the
+    correct iteration without coupling the predicate to the planner.
+    """
+    forced = ForcedCellPlanner(
+        family="corpus_poisoning",
+        strategy="jamming",
+        success_metric="asr_deny",
+    )
+    plan = make_plan_node(forced)
+    out = plan({"iteration": 0, "query": "anything"})
+    assert out["success_metric"] == "asr_deny"
+    assert out["attack_family"] == "corpus_poisoning"
+    assert out["attack_strategy"] == "jamming"
+
+
+def test_forced_cell_planner_default_metric_is_integrity() -> None:
+    """``ForcedCellPlanner`` without an explicit metric defaults to
+    ``asr_target`` (the integrity cells' metric). Confirms the dataclass
+    default and that the field reaches state.
+    """
+    forced = ForcedCellPlanner(
+        family="prompt_injection",
+        strategy="instruction_override",
+    )
+    plan = make_plan_node(forced)
+    out = plan({"iteration": 0, "query": "anything"})
+    assert out["success_metric"] == "asr_target"
+
+
+def test_make_plan_node_omits_metric_for_legacy_planners() -> None:
+    """Round-robin and ε-greedy planners don't carry ``success_metric``.
+    The plan-node output omits the field so the predicate falls back to
+    the default ``"asr_target"`` at read time — keeping the
+    ``PlannerLike`` protocol thin.
+    """
+
+    class _BarePlanner:
+        """Has no ``success_metric`` attribute; mimics the ε-greedy /
+        round-robin protocol surface."""
+
+        def select(self, query_text: str) -> str:  # type: ignore[override]
+            del query_text
+            return "prompt_injection"
+
+        def update(self, query_text: str, family: str, asr_t: bool) -> None:
+            del query_text, family, asr_t
+
+    plan = make_plan_node(_BarePlanner())  # type: ignore[arg-type]
+    out = plan({"iteration": 0, "query": "anything"})
+    assert "success_metric" not in out
 
 
 def test_graph_runs_one_iteration_round_trip() -> None:
